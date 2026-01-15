@@ -1,0 +1,10 @@
+bin/
+build/
+dist/
+*.log
+*.tmp
+*.exe
+.coverage
+coverage*
+config.json
+
