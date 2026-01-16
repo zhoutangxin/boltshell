@@ -133,53 +133,53 @@ func Start(database *sql.DB, logger *logging.Logger) error { // GUI 程序入口
 	return nil // 正常结束时返回 nil
 }
 
-func addPage(gtx layout.Context, th *material.Theme, database *sql.DB, st *state) layout.Dimensions {
-	inset := layout.UniformInset(unit.Dp(16))
+func addPage(gtx layout.Context, th *material.Theme, database *sql.DB, st *state) layout.Dimensions { // “添加连接”页面布局
+	inset := layout.UniformInset(unit.Dp(16)) // 整个页面四周留 16dp 内边距
 	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(material.Editor(th, &st.nameEd, "名称").Layout),
-			layout.Rigid(material.Editor(th, &st.hostEd, "主机").Layout),
-			layout.Rigid(material.Editor(th, &st.portEd, "端口").Layout),
-			layout.Rigid(material.Editor(th, &st.userEd, "用户名").Layout),
-			layout.Rigid(material.Editor(th, &st.passEd, "密码").Layout),
-			layout.Rigid(material.Editor(th, &st.groupEd, "分组").Layout),
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, // 垂直依次排布各个输入控件
+			layout.Rigid(material.Editor(th, &st.nameEd, "名称").Layout),  // 连接名称
+			layout.Rigid(material.Editor(th, &st.hostEd, "主机").Layout),  // 主机地址
+			layout.Rigid(material.Editor(th, &st.portEd, "端口").Layout),  // 端口
+			layout.Rigid(material.Editor(th, &st.userEd, "用户名").Layout), // 用户名
+			layout.Rigid(material.Editor(th, &st.passEd, "密码").Layout),  // 密码
+			layout.Rigid(material.Editor(th, &st.groupEd, "分组").Layout), // 分组
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				return material.Switch(th, &st.enableSw, "启用").Layout(gtx)
+				return material.Switch(th, &st.enableSw, "启用").Layout(gtx) // 是否启用
 			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				btn := material.Button(th, &st.saveBtn, "保存")
-				if st.saveBtn.Clicked(gtx) {
+				btn := material.Button(th, &st.saveBtn, "保存") // 保存按钮
+				if st.saveBtn.Clicked(gtx) {                  // 点击后执行保存逻辑
 					name := st.nameEd.Text()
 					host := st.hostEd.Text()
 					user := st.userEd.Text()
 					pass := st.passEd.Text()
 					group := st.groupEd.Text()
-					p, _ := strconv.Atoi(st.portEd.Text())
+					p, _ := strconv.Atoi(st.portEd.Text()) // 端口文本转为整数，错误时默认为 0
 					en := 0
-					if st.enableSw.Value {
+					if st.enableSw.Value { // “启用”开关转为 0/1 存入数据库
 						en = 1
 					}
-					if host == "" || user == "" || pass == "" {
+					if host == "" || user == "" || pass == "" { // 必填项校验
 						st.lastMessage = "缺少必填项"
 					} else {
-						err := db.InsertConnection(database, db.Connection{
-							ID:        db.NewID(),
-							Name:      name,
-							Host:      host,
-							Port:      p,
-							User:      user,
-							Password:  pass,
-							GroupName: group,
-							Enabled:   en,
-							Deleted:   0,
-							CreatedAt: time.Now().Unix(),
+						err := db.InsertConnection(database, db.Connection{ // 插入一条新的连接记录
+							ID:        db.NewID(),        // 主键 ID（非自增）
+							Name:      name,              // 名称
+							Host:      host,              // 主机
+							Port:      p,                 // 端口
+							User:      user,              // 用户名
+							Password:  pass,              // 密码
+							GroupName: group,             // 分组名称
+							Enabled:   en,                // 是否启用（1=启用，0=禁用）
+							Deleted:   0,                 // 默认未删除
+							CreatedAt: time.Now().Unix(), // 创建时间（秒级时间戳）
 						})
-						if err != nil {
+						if err != nil { // 保存失败
 							st.lastMessage = err.Error()
-						} else {
+						} else { // 保存成功
 							st.lastMessage = "保存成功"
-							loadList(database, st)
-							st.pageList = true
+							loadList(database, st) // 重新加载列表页数据
+							st.pageList = true     // 自动切回“连接列表”页面
 						}
 					}
 				}
@@ -189,54 +189,54 @@ func addPage(gtx layout.Context, th *material.Theme, database *sql.DB, st *state
 	})
 }
 
-func listPage(gtx layout.Context, th *material.Theme, database *sql.DB, st *state) layout.Dimensions {
-	inset := layout.UniformInset(unit.Dp(8))
+func listPage(gtx layout.Context, th *material.Theme, database *sql.DB, st *state) layout.Dimensions { // “连接列表”页面布局
+	inset := layout.UniformInset(unit.Dp(8)) // 页面四周 8dp 内边距
 	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
-				l := material.List(th, &st.connList)
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { // 上半部分：连接列表，占用大部分空间
+				l := material.List(th, &st.connList) // 使用可滚动 List 展示所有连接
 				return l.Layout(gtx, len(st.items), func(gtx layout.Context, i int) layout.Dimensions {
-					it := st.items[i]
-					connect := &st.connectBtns[i]
-					remove := &st.removeBtns[i]
-					return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-						layout.Rigid(material.Body1(th, it.Name).Layout),
+					it := st.items[i]                                       // 当前第 i 条连接
+					connect := &st.connectBtns[i]                           // “连接”按钮状态
+					remove := &st.removeBtns[i]                             // “删除/恢复”按钮状态
+					return layout.Flex{Axis: layout.Horizontal}.Layout(gtx, // 一条记录在一行里横向排布
+						layout.Rigid(material.Body1(th, it.Name).Layout), // 名称
 						layout.Rigid(spacer),
-						layout.Rigid(material.Body1(th, it.Host).Layout),
+						layout.Rigid(material.Body1(th, it.Host).Layout), // 主机
 						layout.Rigid(spacer),
-						layout.Rigid(material.Body1(th, strconv.Itoa(it.Port)).Layout),
+						layout.Rigid(material.Body1(th, strconv.Itoa(it.Port)).Layout), // 端口
 						layout.Rigid(spacer),
-						layout.Rigid(material.Body1(th, it.User).Layout),
+						layout.Rigid(material.Body1(th, it.User).Layout), // 用户
 						layout.Rigid(spacer),
-						layout.Rigid(material.Body1(th, it.GroupName).Layout),
+						layout.Rigid(material.Body1(th, it.GroupName).Layout), // 分组
 						layout.Rigid(spacer),
-						layout.Rigid(material.Body1(th, strconv.Itoa(it.Enabled)).Layout),
+						layout.Rigid(material.Body1(th, strconv.Itoa(it.Enabled)).Layout), // 是否启用（0/1）
 						layout.Rigid(spacer),
-						layout.Rigid(material.Body1(th, strconv.FormatInt(it.CreatedAt, 10)).Layout),
+						layout.Rigid(material.Body1(th, strconv.FormatInt(it.CreatedAt, 10)).Layout), // 创建时间（时间戳）
 						layout.Rigid(spacer),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions { // “连接”按钮
 							btn := material.Button(th, connect, "连接")
-							if connect.Clicked(gtx) {
+							if connect.Clicked(gtx) { // 点击后打开或激活对应 SSH 会话
 								openSession(th, st, it)
 							}
 							return btn.Layout(gtx)
 						}),
 						layout.Rigid(spacer),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions { // “删除/恢复”按钮
 							text := "删除"
-							if it.Deleted == 1 {
+							if it.Deleted == 1 { // 已删除的显示为“恢复”
 								text = "恢复"
 							}
 							btn := material.Button(th, remove, text)
 							if remove.Clicked(gtx) {
 								d := 1
-								if it.Deleted == 1 {
+								if it.Deleted == 1 { // 如果当前是已删除，则点击后恢复
 									d = 0
 								}
-								if err := db.SetDeleted(database, it.ID, d); err != nil {
+								if err := db.SetDeleted(database, it.ID, d); err != nil { // 更新 Deleted 标记
 									st.lastMessage = err.Error()
 								} else {
-									loadList(database, st)
+									loadList(database, st) // 更新成功后重新加载列表
 								}
 							}
 							return btn.Layout(gtx)
@@ -244,16 +244,16 @@ func listPage(gtx layout.Context, th *material.Theme, database *sql.DB, st *stat
 					)
 				})
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-				if len(st.sessions) == 0 {
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { // 中间：会话和终端区域
+				if len(st.sessions) == 0 { // 没有打开任何会话则不显示
 					return layout.Dimensions{}
 				}
 				return sessionsArea(gtx, th, st)
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { // 底部：刷新按钮
 				btn := material.Button(th, &st.refreshBtn, "刷新")
 				if st.refreshBtn.Clicked(gtx) {
-					loadList(database, st)
+					loadList(database, st) // 手动重新加载列表
 				}
 				return btn.Layout(gtx)
 			}),
