@@ -72,8 +72,10 @@ type session struct { // 单个 SSH 会话（终端标签页）的状态
 }
 
 var invalidateWindow func() // 保存一个函数，用于在其他 goroutine 中请求窗口重绘
+var guiLogger *logging.Logger
 
 func Start(database *sql.DB, logger *logging.Logger) error { // GUI 程序入口，由 main 调用
+	guiLogger = logger
 	go func() { // 启动一个 goroutine 运行窗口事件循环
 		w := new(app.Window)                         // 创建一个新的 Gio 窗口
 		invalidateWindow = func() { w.Invalidate() } // 记录重绘函数，供其他地方调用
@@ -266,31 +268,35 @@ func spacer(gtx layout.Context) layout.Dimensions {
 	return layout.Dimensions{Size: gtx.Constraints.Min}
 }
 
-func loadList(database *sql.DB, st *state) {
+func loadList(database *sql.DB, st *state) { // 从数据库加载连接列表并应用过滤
+	// 根据“显示已删除”开关的状态，决定是否加载 deleted=1 的记录
 	all, err := db.ListConnections(database, st.showDelSw.Value, "")
-	if err != nil {
-		st.lastMessage = err.Error()
+	if err != nil { // 如果查询出错
+		st.lastMessage = err.Error() // 在状态栏显示错误信息
 		return
 	}
 
+	// 统计所有出现过的分组名称，用于构建左侧分组列表
 	groupsSet := map[string]struct{}{}
 	for _, it := range all {
 		groupsSet[it.GroupName] = struct{}{}
 	}
 
+	// 将 Set 转换为 Slice，并排序
 	var groups []string
-	groups = append(groups, "")
+	groups = append(groups, "") // 第一个元素为空字符串，表示“全部”分组
 	for g := range groupsSet {
 		if g != "" {
 			groups = append(groups, g)
 		}
 	}
 	if len(groups) > 1 {
-		sort.Strings(groups[1:])
+		sort.Strings(groups[1:]) // 对除了第一个以外的分组名进行字母排序
 	}
-	st.groups = groups
-	st.groupBtns = make([]widget.Clickable, len(groups))
+	st.groups = groups                                   // 更新状态中的分组列表
+	st.groupBtns = make([]widget.Clickable, len(groups)) // 重置分组按钮状态数组
 
+	// 检查当前选中的分组是否还在新的分组列表中
 	valid := false
 	for _, g := range groups {
 		if g == st.currentGrp {
@@ -298,73 +304,74 @@ func loadList(database *sql.DB, st *state) {
 			break
 		}
 	}
-	if !valid {
+	if !valid { // 如果当前选中的分组不存在了（例如被改名或删除了），则重置为“全部”
 		st.currentGrp = ""
 	}
 
+	// 根据当前选中的分组过滤连接列表
 	var filtered []db.Connection
 	for _, it := range all {
-		if st.currentGrp != "" && it.GroupName != st.currentGrp {
-			continue
+		if st.currentGrp != "" && it.GroupName != st.currentGrp { // 如果没选中“全部”且分组名不匹配
+			continue // 跳过该记录
 		}
-		filtered = append(filtered, it)
+		filtered = append(filtered, it) // 加入过滤后的列表
 	}
-	st.items = filtered
-	st.connectBtns = make([]widget.Clickable, len(filtered))
-	st.removeBtns = make([]widget.Clickable, len(filtered))
+	st.items = filtered                                      // 更新界面显示的列表数据
+	st.connectBtns = make([]widget.Clickable, len(filtered)) // 重置连接按钮状态
+	st.removeBtns = make([]widget.Clickable, len(filtered))  // 重置删除按钮状态
 }
 
-func topBar(gtx layout.Context, th *material.Theme, database *sql.DB, st *state) layout.Dimensions {
-	inset := layout.UniformInset(unit.Dp(8))
+func topBar(gtx layout.Context, th *material.Theme, database *sql.DB, st *state) layout.Dimensions { // 顶部工具栏布局
+	inset := layout.UniformInset(unit.Dp(8)) // 四周留白 8dp
 	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx, // 水平排列按钮
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { // “添加连接”按钮
 				btn := material.Button(th, &st.tabAdd, "添加连接")
-				if !st.pageList {
+				if !st.pageList { // 如果当前已经在添加页，高亮或改变背景
 					btn.Background = th.Palette.ContrastBg
 				}
-				if st.tabAdd.Clicked(gtx) {
+				if st.tabAdd.Clicked(gtx) { // 点击时切换到添加页
 					st.pageList = false
 				}
 				return btn.Layout(gtx)
 			}),
-			layout.Rigid(spacer),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			layout.Rigid(spacer), // 按钮间距
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { // “连接列表”按钮
 				btn := material.Button(th, &st.tabList, "连接列表")
-				if st.pageList {
+				if st.pageList { // 如果当前在列表页，高亮
 					btn.Background = th.Palette.ContrastBg
 				}
-				if st.tabList.Clicked(gtx) {
+				if st.tabList.Clicked(gtx) { // 点击时切换到列表页并刷新数据
 					st.pageList = true
 					loadList(database, st)
 				}
 				return btn.Layout(gtx)
 			}),
-			layout.Rigid(spacer),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+			layout.Rigid(spacer), // 间距
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { // “显示已删除”开关
 				before := st.showDelSw.Value
 				dims := material.Switch(th, &st.showDelSw, "显示已删除").Layout(gtx)
-				if st.showDelSw.Value != before {
+				if st.showDelSw.Value != before { // 如果开关状态改变，重新加载列表
 					loadList(database, st)
 				}
 				return dims
 			}),
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { // 右侧空白占位
 				return layout.Dimensions{}
 			}),
 		)
 	})
 }
 
-func sidebar(gtx layout.Context, th *material.Theme, database *sql.DB, st *state) layout.Dimensions {
-	inset := layout.UniformInset(unit.Dp(8))
+func sidebar(gtx layout.Context, th *material.Theme, database *sql.DB, st *state) layout.Dimensions { // 左侧分组侧边栏布局
+	inset := layout.UniformInset(unit.Dp(8)) // 四周留白
 	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+		return layout.Flex{Axis: layout.Vertical}.Layout(gtx, // 垂直排列
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { // 标题“连接”
 				title := material.Body1(th, "连接")
 				return title.Layout(gtx)
 			}),
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { // 可滚动的分组列表
 				l := material.List(th, &st.groupList)
 				return l.Layout(gtx, len(st.groups), func(gtx layout.Context, i int) layout.Dimensions {
 					if i < 0 || i >= len(st.groups) {
@@ -375,16 +382,16 @@ func sidebar(gtx layout.Context, th *material.Theme, database *sql.DB, st *state
 					if key == "" {
 						text = "全部"
 					}
-					btn := &st.groupBtns[i]
-					if btn.Clicked(gtx) {
-						st.currentGrp = key
-						loadList(database, st)
+					btn := &st.groupBtns[i] // 获取对应的点击状态
+					if btn.Clicked(gtx) {   // 如果被点击
+						st.currentGrp = key    // 更新当前分组
+						loadList(database, st) // 刷新列表
 					}
-					return material.Clickable(gtx, btn, func(gtx layout.Context) layout.Dimensions {
+					return material.Clickable(gtx, btn, func(gtx layout.Context) layout.Dimensions { // 绘制可点击区域
 						in := layout.UniformInset(unit.Dp(4))
 						return in.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 							display := text
-							if key == st.currentGrp {
+							if key == st.currentGrp { // 如果是当前选中项，加个点标记
 								display = "● " + display
 							}
 							lbl := material.Body1(th, display)
@@ -548,6 +555,12 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 							if s.term == nil || s.term.Stdin == nil { // 没有终端会话则不处理
 								continue
 							}
+
+							nameStr := string(e.Name) // 统一取出键名（部分平台会给出特殊符号）
+							var r rune
+							if len(nameStr) > 0 {
+								r, _ = utf8.DecodeRuneInString(nameStr)
+							}
 							var data string // 要发送到远端的控制序列字符串
 							switch e.Name { // 根据按键名称决定发送什么
 							case key.NameReturn, key.NameEnter: // 回车键
@@ -579,7 +592,24 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 							default:
 								data = "" // 其它特殊键暂时不处理
 							}
+
+							// 兼容处理：部分平台把退格键/删除键映射为特殊 Unicode 符号
+							if data == "" && len(nameStr) > 0 {
+								switch r {
+								case '\b', 0x7f, 0x232B: // \b、DEL 或“⌫”
+									data = "\x7f"
+								case 0x2326: // “⌦”
+									data = "\x1b[3~"
+								}
+							}
+
+							if guiLogger != nil && (e.Name == key.NameDeleteBackward || e.Name == key.NameDeleteForward ||
+								r == '\b' || r == 0x7f || r == 0x232B || r == 0x2326) {
+								guiLogger.Info("GUI KeyEvent delete name=%q rune=%U data_hex=%x", nameStr, r, []byte(data))
+							}
+
 							if data != "" { // 如果有数据要发
+								// 这里不再记录 SendData 的详细内容，避免日志中出现难以辨认的控制字符
 								_, err := s.term.Stdin.Write([]byte(data)) // 写入远端终端的标准输入
 								if err != nil {                            // 写入失败
 									s.log += "\n错误:\n" + err.Error() // 在终端日志里追加错误信息
@@ -594,6 +624,7 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 								continue
 							}
 							if e.Text != "" { // Text 非空：表示有文本要插入
+
 								_, err := s.term.Stdin.Write([]byte(e.Text)) // 直接把文字写到远端
 								if err != nil {
 									s.log += "\n错误:\n" + err.Error()
@@ -607,10 +638,14 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 							// Text 为空，但 Range 有长度：通常表示删除操作
 							if e.Range.End > e.Range.Start {
 								count := e.Range.End - e.Range.Start // 需要删除的字符数
+
 								if count > 0 {
 									buf := make([]byte, count) // 构造多个退格控制码
 									for i := 0; i < count; i++ {
 										buf[i] = 0x7f // 每个字符用 DEL(0x7f) 表示删除
+									}
+									if guiLogger != nil {
+										guiLogger.Info("GUI EditEvent delete count=%d data_hex=%x", count, buf)
 									}
 									_, err := s.term.Stdin.Write(buf) // 发送删除控制码到远端
 									if err != nil {
