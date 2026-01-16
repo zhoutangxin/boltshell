@@ -10,6 +10,7 @@ require golang.org/x/term v0.39.0
 
 require (
 	gioui.org/shader v1.0.8 // indirect
+	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-text/typesetting v0.3.0 // indirect
 	github.com/google/uuid v1.6.0 // indirect

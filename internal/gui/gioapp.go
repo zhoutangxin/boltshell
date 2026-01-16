@@ -1,28 +1,30 @@
 package gui // 本文件所在的包名，GUI 相关代码都在这个包里
 
 import (
-	"database/sql" // 标准库：操作数据库连接（*sql.DB）
-	"image/color"  // 标准库：颜色结构（NRGBA 等），用于界面颜色
-	"sort"         // 标准库：排序工具（用于分组排序）
-	"strconv"      // 标准库：字符串和数字之间转换
-	"strings"      // 标准库：字符串处理（分割、替换等）
-	"time"         // 标准库：时间和日期
-	"unicode/utf8" // 标准库：UTF-8 字符串解码（逐个 rune 解析）
+	"database/sql"
+	"image/color"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+	"unicode/utf8"
 
-	"gioui.org/app"                                // Gio：应用和窗口管理（创建窗口、事件循环）
-	"gioui.org/io/event"                           // Gio：通用事件系统（键盘、鼠标等 Tag）
-	"gioui.org/io/key"                             // Gio：键盘事件和输入法事件（KeyEvent、EditEvent）
-	"gioui.org/layout"                             // Gio：通用布局（Flex、List、Inset 等）
-	"gioui.org/op"                                 // Gio：绘制操作容器
-	"gioui.org/op/clip"                            // Gio：裁剪绘制区域（clip.Rect）
-	"gioui.org/op/paint"                           // Gio：填充颜色、绘制操作
-	"gioui.org/unit"                               // Gio：dp / sp 等单位转换
-	"gioui.org/widget"                             // Gio：基础控件状态（Editor、List、Clickable 等）
-	"gioui.org/widget/material"                    // Gio：Material Design 风格的组件绘制
-	"golang.org/x/text/encoding/simplifiedchinese" // 第三方：简体中文编码（GBK/GB18030）转换
-	"ssh-go/internal/db"                           // 本项目：数据库访问（连接配置增删改查）
-	"ssh-go/internal/logging"                      // 本项目：简单日志封装
-	"ssh-go/internal/sshclient"                    // 本项目：SSH 客户端与终端会话封装
+	"gioui.org/app"
+	"gioui.org/io/event"
+	"gioui.org/io/key"
+	"gioui.org/layout"
+	"gioui.org/op"
+	"gioui.org/op/clip"
+	"gioui.org/op/paint"
+	"gioui.org/unit"
+	"gioui.org/widget"
+	"gioui.org/widget/material"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"ssh-go/internal/db"
+	"ssh-go/internal/logging"
+	"ssh-go/internal/sshclient"
+
+	"github.com/atotto/clipboard"
 )
 
 type state struct { // 整个窗口的全局状态，保存所有控件和数据的当前值
@@ -63,12 +65,12 @@ type state struct { // 整个窗口的全局状态，保存所有控件和数据
 }
 
 type session struct { // 单个 SSH 会话（终端标签页）的状态
-	conn    db.Connection              // 该会话对应的连接配置（IP、端口、用户等）
-	title   string                     // 会话标题，在顶部 Tab 上显示
-	log     string                     // 从远端读取到的终端文本日志（包括 ANSI 转义）
-	cmdEd   widget.Editor              // 预留的命令输入编辑器（当前未真正使用）
-	term    *sshclient.TerminalSession // SSH 终端会话对象，封装了 Stdin/Stdout
-	logList layout.List                // 展示 log 的滚动列表状态，用于自动滚动到底部
+	conn    db.Connection
+	title   string
+	log     string
+	cmdEd   widget.Editor
+	term    *sshclient.TerminalSession
+	logList layout.List
 }
 
 var invalidateWindow func() // 保存一个函数，用于在其他 goroutine 中请求窗口重绘
@@ -83,6 +85,7 @@ func Start(database *sql.DB, logger *logging.Logger) error { // GUI 程序入口
 			app.Size(unit.Dp(900), unit.Dp(600)), // 窗口尺寸为 900x600 dp
 			app.Title("连接管理"),                    // 窗口标题文字
 		)
+		w.Option(app.Maximized.Option())
 		th := material.NewTheme()           // 创建一个 Material Design 主题
 		var st state                        // 界面全局状态（所有控件的状态都存在这里）
 		st.portEd.SetText("22")             // “端口”输入框默认值设为 22
@@ -459,7 +462,7 @@ func startTerminalReader(s *session) { // 后台读取远端终端输出，更�
 			if n > 0 {                        // 如果本次读到了数据
 				chunk := make([]byte, n)                   // 新建一个切片保存实际数据
 				copy(chunk, buf[:n])                       // 把 buf 中的数据拷贝出来
-				s.log += decodeRemote(chunk)               // 解码远端编码（UTF-8 / GBK）追加到日志
+				appendTerminalOutput(&s.log, chunk)        // 解码并按终端控制规则更新日志
 				const maxLines = 2000                      // 日志只保留 2000 行，避免内存无限增长
 				if strings.Count(s.log, "\n") > maxLines { // 如果行数超过最大值
 					over := strings.Count(s.log, "\n") - maxLines // 超出的行数
@@ -484,6 +487,18 @@ func startTerminalReader(s *session) { // 后台读取远端终端输出，更�
 			}
 		}
 	}()
+}
+
+// appendTerminalOutput 按终端规则处理远端输出：
+// - 把 \b 和 DEL(0x7f) 当作退格，从当前日志中删除最后一个字符
+// - 把 \r 简单处理为换行
+// - 丢弃其它不可见控制字符
+func appendTerminalOutput(log *string, raw []byte) {
+	text := decodeRemote(raw)
+	if text == "" {
+		return
+	}
+	*log += text
 }
 
 func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dimensions { // 下方会话列表+终端区域
@@ -526,34 +541,78 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 				if st.activeSession < 0 || st.activeSession >= len(st.sessions) { // 没有激活会话
 					return layout.Dimensions{} // 不绘制任何内容
 				}
-				s := &st.sessions[st.activeSession]         // 取当前激活会话
-				outInset := layout.UniformInset(unit.Dp(4)) // 终端内容四周再留 4dp 内边距
+				s := &st.sessions[st.activeSession] // 取当前激活会话
+				outInset := layout.UniformInset(unit.Dp(4))
 				return outInset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					// 把当前会话 s 注册为可接收键盘事件的目标
 					// 这样键盘输入（回车、Tab、方向键等）就会发给该会话，而不是其它控件
-					event.Op(gtx.Ops, s)              // 注册事件 Tag
-					gtx.Execute(key.FocusCmd{Tag: s}) // 请求把键盘焦点设置到当前会话
+					event.Op(gtx.Ops, s)
+					gtx.Execute(key.FocusCmd{Tag: s})
 
-					for { // 循环处理本帧中所有与 s 相关的键盘事件
+					for {
 						ev, ok := gtx.Event(
-							key.FocusFilter{Target: s},                         // 获取与 s 相关的焦点/输入法事件
-							key.Filter{Focus: s, Name: key.NameReturn},         // 过滤回车键（Return）
-							key.Filter{Focus: s, Name: key.NameEnter},          // 过滤回车键（Enter）
-							key.Filter{Focus: s, Name: key.NameTab},            // 过滤 Tab 键
-							key.Filter{Focus: s, Name: key.NameDeleteBackward}, // 过滤退格键 Backspace
-							key.Filter{Focus: s, Name: key.NameDeleteForward},  // 过滤 Delete 键
-							key.Filter{Focus: s},                               // 其它普通键
+							key.FocusFilter{Target: s},
+							key.Filter{Focus: s, Name: key.NameReturn},
+							key.Filter{Focus: s, Name: key.NameEnter},
+							key.Filter{Focus: s, Name: key.NameTab},
+							key.Filter{Focus: s, Name: key.NameDeleteBackward},
+							key.Filter{Focus: s, Name: key.NameDeleteForward},
+							key.Filter{Focus: s, Name: "C", Required: key.ModShortcut | key.ModShift},
+							key.Filter{Focus: s, Name: "V", Required: key.ModShortcut | key.ModShift},
+							key.Filter{Focus: s},
 						)
-						if !ok { // 如果没有事件可以处理了
-							break // 退出事件处理循环
+						if !ok {
+							break
 						}
-						switch e := ev.(type) { // 根据事件类型分支
-						case key.Event: // 单个键按下/松开事件
-							if e.State != key.Press { // 只关心“按下”，忽略“松开”
+						switch e := ev.(type) {
+						case key.Event:
+							if e.State != key.Press {
 								continue
 							}
-							if s.term == nil || s.term.Stdin == nil { // 没有终端会话则不处理
+							if s.term == nil || s.term.Stdin == nil {
 								continue
+							}
+
+							if (e.Modifiers & (key.ModShortcut | key.ModShift)) == (key.ModShortcut | key.ModShift) {
+								nameStr := string(e.Name)
+								if nameStr == "C" || nameStr == "c" {
+									if s.log != "" {
+										if guiLogger != nil {
+											guiLogger.Info("GUI Copy terminal text len=%d", len(s.log))
+										}
+										if err := clipboard.WriteAll(s.log); err != nil {
+											s.log += "\n错误:\n" + err.Error()
+											if invalidateWindow != nil {
+												invalidateWindow()
+											}
+											st.lastMessage = "复制到剪贴板失败"
+										} else {
+											st.lastMessage = "终端内容已复制到剪贴板"
+										}
+									}
+									continue
+								}
+								if nameStr == "V" || nameStr == "v" {
+									text, err := clipboard.ReadAll()
+									if err != nil {
+										s.log += "\n错误:\n" + err.Error()
+										if invalidateWindow != nil {
+											invalidateWindow()
+										}
+										st.lastMessage = "读取剪贴板失败"
+										continue
+									}
+									if text != "" {
+										if _, err := s.term.Stdin.Write([]byte(text)); err != nil {
+											s.log += "\n错误:\n" + err.Error()
+											if invalidateWindow != nil {
+												invalidateWindow()
+											}
+											st.lastMessage = "粘贴失败"
+										}
+									}
+									continue
+								}
 							}
 
 							nameStr := string(e.Name) // 统一取出键名（部分平台会给出特殊符号）
@@ -568,7 +627,7 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 							case key.NameTab: // Tab 键
 								data = "\t" // 发送制表符
 							case key.NameDeleteBackward: // 退格键（Backspace）
-								data = "\x7f" // 发送 DEL(0x7f)，一般配置下表示退格
+								data = "\x7f" // 默认发送 DEL(0x7f)，与常见 Linux erase = ^? 一致
 							case key.NameDeleteForward: // Delete 键
 								data = "\x1b[3~" // ANSI 序列：Delete
 							case key.NameLeftArrow: // 左方向键
@@ -619,11 +678,11 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 									st.lastMessage = "命令发送失败" // 底部状态栏提示失败
 								}
 							}
-						case key.EditEvent: // 输入法编辑事件（文本输入或删除）
-							if s.term == nil || s.term.Stdin == nil { // 没有终端会话则忽略
+						case key.EditEvent:
+							if s.term == nil || s.term.Stdin == nil {
 								continue
 							}
-							if e.Text != "" { // Text 非空：表示有文本要插入
+							if e.Text != "" {
 
 								_, err := s.term.Stdin.Write([]byte(e.Text)) // 直接把文字写到远端
 								if err != nil {
@@ -633,9 +692,9 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 									}
 									st.lastMessage = "命令发送失败"
 								}
-								continue // 该事件已处理完，继续处理下一个
+								continue
 							}
-							// Text 为空，但 Range 有长度：通常表示删除操作
+
 							if e.Range.End > e.Range.Start {
 								count := e.Range.End - e.Range.Start // 需要删除的字符数
 
@@ -658,10 +717,10 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 								}
 							}
 						default:
-							continue // 其它类型事件暂时不处理
+							continue
 						}
 					}
-					// 处理完所有键盘事件后，渲染终端文本区域（带滚动和光标）
+
 					return layoutAnsiText(gtx, th, &s.logList, s.log, true)
 				})
 			}),
