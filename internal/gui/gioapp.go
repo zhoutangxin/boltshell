@@ -2,6 +2,7 @@ package gui // 本文件所在的包名，GUI 相关代码都在这个包里
 
 import (
 	"database/sql"
+	"image"
 	"image/color"
 	"sort"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"gioui.org/app"
 	"gioui.org/io/event"
 	"gioui.org/io/key"
+	"gioui.org/io/pointer"
 	"gioui.org/layout"
 	"gioui.org/op"
 	"gioui.org/op/clip"
@@ -65,16 +67,23 @@ type state struct { // 整个窗口的全局状态，保存所有控件和数据
 }
 
 type session struct { // 单个 SSH 会话（终端标签页）的状态
-	conn    db.Connection
-	title   string
-	log     string
-	cmdEd   widget.Editor
-	term    *sshclient.TerminalSession
+	conn  db.Connection
+	title string
+	log   string
+
+	term *sshclient.TerminalSession
+
 	logList layout.List
+	cmdEd   widget.Editor
+
+	menuArea        widget.Clickable
+	menuCopyBtn     widget.Clickable
+	menuPasteBtn    widget.Clickable
+	contextMenuOpen bool
 }
 
-var invalidateWindow func() // 保存一个函数，用于在其他 goroutine 中请求窗口重绘
 var guiLogger *logging.Logger
+var invalidateWindow func()
 
 func Start(database *sql.DB, logger *logging.Logger) error { // GUI 程序入口，由 main 调用
 	guiLogger = logger
@@ -546,12 +555,16 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 				return outInset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 					// 把当前会话 s 注册为可接收键盘事件的目标
 					// 这样键盘输入（回车、Tab、方向键等）就会发给该会话，而不是其它控件
+					area := clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops)
 					event.Op(gtx.Ops, s)
+					area.Pop()
+
 					gtx.Execute(key.FocusCmd{Tag: s})
 
 					for {
 						ev, ok := gtx.Event(
 							key.FocusFilter{Target: s},
+							pointer.Filter{Target: s, Kinds: pointer.Press},
 							key.Filter{Focus: s, Name: key.NameReturn},
 							key.Filter{Focus: s, Name: key.NameEnter},
 							key.Filter{Focus: s, Name: key.NameTab},
@@ -560,6 +573,7 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 							key.Filter{Focus: s, Name: "C", Required: key.ModShortcut | key.ModShift},
 							key.Filter{Focus: s, Name: "V", Required: key.ModShortcut | key.ModShift},
 							key.Filter{Focus: s},
+							pointer.Filter{Target: s},
 						)
 						if !ok {
 							break
@@ -569,30 +583,32 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 							if e.State != key.Press {
 								continue
 							}
-							if s.term == nil || s.term.Stdin == nil {
-								continue
-							}
 
 							if (e.Modifiers & (key.ModShortcut | key.ModShift)) == (key.ModShortcut | key.ModShift) {
 								nameStr := string(e.Name)
 								if nameStr == "C" || nameStr == "c" {
-									if s.log != "" {
+									text := getCopyTextForSession(s)
+									if text != "" {
 										if guiLogger != nil {
-											guiLogger.Info("GUI Copy terminal text len=%d", len(s.log))
+											guiLogger.Info("GUI Copy terminal selectedText len=%d", len(text))
 										}
-										if err := clipboard.WriteAll(s.log); err != nil {
+										if err := clipboard.WriteAll(text); err != nil {
 											s.log += "\n错误:\n" + err.Error()
 											if invalidateWindow != nil {
 												invalidateWindow()
 											}
 											st.lastMessage = "复制到剪贴板失败"
 										} else {
-											st.lastMessage = "终端内容已复制到剪贴板"
+											st.lastMessage = "已复制选中内容到剪贴板"
 										}
 									}
 									continue
 								}
 								if nameStr == "V" || nameStr == "v" {
+									if s.term == nil || s.term.Stdin == nil {
+										st.lastMessage = "当前会话未连接，无法粘贴"
+										continue
+									}
 									text, err := clipboard.ReadAll()
 									if err != nil {
 										s.log += "\n错误:\n" + err.Error()
@@ -613,6 +629,10 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 									}
 									continue
 								}
+							}
+
+							if s.term == nil || s.term.Stdin == nil {
+								continue
 							}
 
 							nameStr := string(e.Name) // 统一取出键名（部分平台会给出特殊符号）
@@ -716,16 +736,47 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 									}
 								}
 							}
+						case pointer.Event:
+							if e.Kind == pointer.Press {
+								if e.Buttons == pointer.ButtonSecondary {
+									s.contextMenuOpen = true
+								} else {
+									s.contextMenuOpen = false
+								}
+								if invalidateWindow != nil {
+									invalidateWindow()
+								}
+							}
 						default:
 							continue
 						}
 					}
 
-					return layoutAnsiText(gtx, th, &s.logList, s.log, true)
+					return layout.Stack{}.Layout(gtx,
+						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+							return layoutAnsiText(gtx, th, &s.logList, s.log, true)
+						}),
+						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+							if !s.contextMenuOpen || s.log == "" {
+								return layout.Dimensions{}
+							}
+							return drawSelectionToolbar(gtx, th, s, st)
+						}),
+					)
 				})
 			}),
 		)
 	})
+}
+
+func getCopyTextForSession(s *session) string {
+	if s == nil {
+		return ""
+	}
+	if s.log == "" {
+		return ""
+	}
+	return ansiToPlain(s.log)
 }
 
 type ansiRun struct { // 一段连续文本及其对应的前景色
@@ -767,6 +818,180 @@ func layoutAnsiText(gtx layout.Context, th *material.Theme, list *layout.List, s
 			}()...,
 		)
 	})
+}
+
+func ansiToPlain(s string) string {
+	if s == "" {
+		return ""
+	}
+	lines := strings.Split(s, "\n")
+	var b strings.Builder
+	for i, line := range lines {
+		runs := parseANSIRuns(line)
+		for _, r := range runs {
+			b.WriteString(r.text)
+		}
+		if i != len(lines)-1 {
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
+}
+
+func drawSelectionToolbar(gtx layout.Context, th *material.Theme, s *session, st *state) layout.Dimensions {
+	content := func(gtx layout.Context) layout.Dimensions {
+		inset := layout.UniformInset(unit.Dp(4))
+		return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					if s.menuCopyBtn.Clicked(gtx) {
+						text := getCopyTextForSession(s)
+						if text != "" {
+							if guiLogger != nil {
+								guiLogger.Info("GUI Copy terminal selectedText len=%d", len(text))
+							}
+							if err := clipboard.WriteAll(text); err != nil {
+								s.log += "\n错误:\n" + err.Error()
+								if invalidateWindow != nil {
+									invalidateWindow()
+								}
+							} else {
+								st.lastMessage = "已复制选中内容到剪贴板"
+							}
+						}
+						s.contextMenuOpen = false
+					}
+					return material.Clickable(gtx, &s.menuCopyBtn, func(gtx layout.Context) layout.Dimensions {
+						rowPad := layout.UniformInset(unit.Dp(4))
+						return rowPad.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+									lbl := material.Body1(th, "复制")
+									return lbl.Layout(gtx)
+								}),
+								layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+									return layout.Dimensions{}
+								}),
+								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+									lbl := material.Body1(th, "Ctrl+Shift+C")
+									return lbl.Layout(gtx)
+								}),
+							)
+						})
+					})
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					if s.menuPasteBtn.Clicked(gtx) {
+						if s.term == nil || s.term.Stdin == nil {
+							st.lastMessage = "当前会话未连接，无法粘贴"
+						} else {
+							text, err := clipboard.ReadAll()
+							if err != nil {
+								s.log += "\n错误:\n" + err.Error()
+								if invalidateWindow != nil {
+									invalidateWindow()
+								}
+								st.lastMessage = "读取剪贴板失败"
+							} else if text != "" {
+								if _, err := s.term.Stdin.Write([]byte(text)); err != nil {
+									s.log += "\n错误:\n" + err.Error()
+									if invalidateWindow != nil {
+										invalidateWindow()
+									}
+									st.lastMessage = "粘贴失败"
+								}
+							}
+						}
+						s.contextMenuOpen = false
+					}
+					return material.Clickable(gtx, &s.menuPasteBtn, func(gtx layout.Context) layout.Dimensions {
+						rowPad := layout.UniformInset(unit.Dp(4))
+						return rowPad.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+									lbl := material.Body1(th, "粘贴")
+									return lbl.Layout(gtx)
+								}),
+								layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+									return layout.Dimensions{}
+								}),
+								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+									lbl := material.Body1(th, "Ctrl+Shift+V")
+									return lbl.Layout(gtx)
+								}),
+							)
+						})
+					})
+				}),
+			)
+		})
+	}
+
+	// 先记录内容以便获取尺寸
+	macro := op.Record(gtx.Ops)
+	dims := content(gtx)
+	call := macro.Stop()
+
+	// 估算单个字符宽高
+	charMacro := op.Record(gtx.Ops)
+	sampleLbl := material.Body1(th, "W")
+	charDims := sampleLbl.Layout(gtx)
+	charCall := charMacro.Stop()
+	_ = charCall
+
+	charW := charDims.Size.X
+	charH := charDims.Size.Y
+	if charW <= 0 {
+		charW = gtx.Dp(unit.Dp(8))
+	}
+	if charH <= 0 {
+		charH = gtx.Dp(unit.Dp(16))
+	}
+
+	// 计算最后一行文本长度，忽略 ANSI 颜色码
+	lines := strings.Split(s.log, "\n")
+	last := ""
+	if len(lines) > 0 {
+		last = lines[len(lines)-1]
+	}
+	runs := parseANSIRuns(last)
+	colRunes := 0
+	for _, r := range runs {
+		colRunes += utf8.RuneCountInString(r.text)
+	}
+
+	max := gtx.Constraints.Max
+	margin := gtx.Dp(unit.Dp(4))
+	cursorX := colRunes*charW + margin
+	cursorY := max.Y - charH - dims.Size.Y - margin
+	if cursorY < 0 {
+		cursorY = 0
+	}
+	if cursorX+dims.Size.X > max.X-margin {
+		cursorX = max.X - dims.Size.X - margin
+	}
+	if cursorX < 0 {
+		cursorX = 0
+	}
+
+	offset := op.Offset(image.Pt(cursorX, cursorY)).Push(gtx.Ops)
+
+	rect := clip.Rect{Max: dims.Size}.Push(gtx.Ops)
+	paint.ColorOp{Color: color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}}.Add(gtx.Ops)
+	paint.PaintOp{}.Add(gtx.Ops)
+	rect.Pop()
+
+	border := widget.Border{
+		Color:        color.NRGBA{R: 0xcc, G: 0xcc, B: 0xcc, A: 0xff},
+		CornerRadius: unit.Dp(6),
+		Width:        unit.Dp(1),
+	}
+	res := border.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		call.Add(gtx.Ops)
+		return dims
+	})
+	offset.Pop()
+	return res
 }
 
 func parseANSIRuns(s string) []ansiRun { // 解析一行字符串中的 ANSI 颜色控制，拆成多段带颜色文本
