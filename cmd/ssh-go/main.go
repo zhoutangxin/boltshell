@@ -8,9 +8,9 @@ import (
 
 	"ssh-go/internal/config"
 	"ssh-go/internal/db"
+	"ssh-go/internal/gui"
 	"ssh-go/internal/logging"
 	"ssh-go/internal/sshclient"
-	"ssh-go/internal/web"
 )
 
 func main() {
@@ -22,7 +22,6 @@ func main() {
 	port := flag.Int("port", 0, "端口，默认 22")
 	cmd := flag.String("cmd", "", "连接后执行的命令（可选）")
 	shell := flag.Bool("shell", true, "默认进入交互式 Shell，可置为 false 仅执行命令")
-	httpAddr := flag.String("http", "", "启动 HTTP 服务地址，如 127.0.0.1:8080")
 	flag.Parse()
 
 	cfg := config.Default()
@@ -64,23 +63,16 @@ func main() {
 	logger.Info("ssh-go 启动")
 	logger.Info("配置: app=%s level=%s port=%d", cfg.AppName, cfg.LogLevel, cfg.Port)
 
-	if *httpAddr != "" {
-		dbPath := firstNonEmpty(os.Getenv("DB_PATH"), cfg.DBPath)
-		d, err := db.Open(dbPath)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "数据库打开失败: %v\n", err)
-			os.Exit(1)
-		}
-		defer d.Close()
-		if err := db.InitSchema(d); err != nil {
-			fmt.Fprintf(os.Stderr, "初始化数据库失败: %v\n", err)
-			os.Exit(1)
-		}
-		if err := web.Start(*httpAddr, d, logger); err != nil {
-			fmt.Fprintf(os.Stderr, "HTTP 服务异常: %v\n", err)
-			os.Exit(1)
-		}
-		return
+	dbPath := firstNonEmpty(os.Getenv("DB_PATH"), cfg.DBPath)
+	d, err := db.Open(dbPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "数据库打开失败: %v\n", err)
+		os.Exit(1)
+	}
+	defer d.Close()
+	if err := db.InitSchema(d); err != nil {
+		fmt.Fprintf(os.Stderr, "初始化数据库失败: %v\n", err)
+		os.Exit(1)
 	}
 
 	envHost := os.Getenv("SSH_HOST")
@@ -105,8 +97,11 @@ func main() {
 		}
 	}
 	if h == "" || u == "" || p == "" {
-		fmt.Fprintln(os.Stderr, "需要提供 host/user/pass")
-		os.Exit(2)
+		if err := gui.Start(d, logger); err != nil {
+			fmt.Fprintf(os.Stderr, "GUI 异常: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 	if *shell && *cmd == "" {
 		if err := sshclient.Interactive(h, pt, u, p); err != nil {

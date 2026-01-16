@@ -6,7 +6,6 @@ import (
 	_ "modernc.org/sqlite"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 type Connection struct {
@@ -16,7 +15,9 @@ type Connection struct {
 	Port      int
 	User      string
 	Password  string
+	GroupName string
 	Enabled   int
+	Deleted   int
 	CreatedAt int64
 }
 
@@ -44,22 +45,50 @@ CREATE TABLE IF NOT EXISTS connections (
   port INTEGER NOT NULL,
   user TEXT NOT NULL,
   password TEXT NOT NULL,
+  group_name TEXT,
   enabled INTEGER NOT NULL DEFAULT 1,
+  deleted INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL
 );
 `
 	_, err := db.Exec(ddl)
-	return err
+	if err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "connections", "group_name", "TEXT"); err != nil {
+		return err
+	}
+	if err := ensureColumn(db, "connections", "deleted", "INTEGER NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	return nil
 }
 
 func InsertConnection(db *sql.DB, c Connection) error {
-	q := `INSERT INTO connections(id,name,host,port,user,password,enabled,created_at) VALUES(?,?,?,?,?,?,?,?)`
-	_, err := db.Exec(q, c.ID, c.Name, c.Host, c.Port, c.User, c.Password, c.Enabled, c.CreatedAt)
+	q := `INSERT INTO connections(id,name,host,port,user,password,group_name,enabled,deleted,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`
+	_, err := db.Exec(q, c.ID, c.Name, c.Host, c.Port, c.User, c.Password, c.GroupName, c.Enabled, c.Deleted, c.CreatedAt)
 	return err
 }
 
-func ListConnections(db *sql.DB) ([]Connection, error) {
-	rows, err := db.Query(`SELECT id,name,host,port,user,password,enabled,created_at FROM connections ORDER BY created_at DESC`)
+func ListConnections(db *sql.DB, includeDeleted bool, groupFilter string) ([]Connection, error) {
+	q := `SELECT id,name,host,port,user,password,group_name,enabled,deleted,created_at FROM connections`
+	var where string
+	var args []interface{}
+	if !includeDeleted {
+		where = " deleted=0"
+	}
+	if groupFilter != "" {
+		if where != "" {
+			where += " AND"
+		}
+		where += " group_name=?"
+		args = append(args, groupFilter)
+	}
+	if where != "" {
+		q += " WHERE" + where
+	}
+	q += " ORDER BY created_at DESC"
+	rows, err := db.Query(q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +96,7 @@ func ListConnections(db *sql.DB) ([]Connection, error) {
 	var res []Connection
 	for rows.Next() {
 		var c Connection
-		if err := rows.Scan(&c.ID, &c.Name, &c.Host, &c.Port, &c.User, &c.Password, &c.Enabled, &c.CreatedAt); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.Host, &c.Port, &c.User, &c.Password, &c.GroupName, &c.Enabled, &c.Deleted, &c.CreatedAt); err != nil {
 			return nil, err
 		}
 		res = append(res, c)
@@ -89,4 +118,29 @@ func hex(b []byte) string {
 		dst[i*2+1] = hexdigits[v&0x0f]
 	}
 	return string(dst)
+}
+
+func ensureColumn(db *sql.DB, table, col, def string) error {
+	var exists int
+	row := db.QueryRow(`SELECT COUNT(*) FROM pragma_table_info(?) WHERE name=?`, table, col)
+	if err := row.Scan(&exists); err != nil {
+		return err
+	}
+	if exists == 0 {
+		_, err := db.Exec(`ALTER TABLE ` + table + ` ADD COLUMN ` + col + ` ` + def)
+		return err
+	}
+	return nil
+}
+
+func SetDeleted(db *sql.DB, id string, deleted int) error {
+	_, err := db.Exec(`UPDATE connections SET deleted=? WHERE id=?`, deleted, id)
+	return err
+}
+
+func GetByID(db *sql.DB, id string) (Connection, error) {
+	var c Connection
+	row := db.QueryRow(`SELECT id,name,host,port,user,password,group_name,enabled,deleted,created_at FROM connections WHERE id=?`, id)
+	err := row.Scan(&c.ID, &c.Name, &c.Host, &c.Port, &c.User, &c.Password, &c.GroupName, &c.Enabled, &c.Deleted, &c.CreatedAt)
+	return c, err
 }

@@ -3,6 +3,7 @@ package sshclient
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -13,6 +14,14 @@ import (
 type Result struct {
 	Stdout string
 	Stderr string
+}
+
+type TerminalSession struct {
+	client  *ssh.Client
+	session *ssh.Session
+	Stdin   io.WriteCloser
+	Stdout  io.Reader
+	Stderr  io.Reader
 }
 
 func Interactive(host string, port int, user, pass string) error {
@@ -62,6 +71,80 @@ func Interactive(host string, port int, user, pass string) error {
 		return err
 	}
 	return s.Wait()
+}
+
+func NewTerminalSession(host string, port int, user, pass string, width, height int) (*TerminalSession, error) {
+	if host == "" || user == "" || pass == "" {
+		return nil, fmt.Errorf("参数不完整")
+	}
+	addr := fmt.Sprintf("%s:%d", host, portIfZero(port))
+	cfg := &ssh.ClientConfig{
+		User:            user,
+		Auth:            []ssh.AuthMethod{ssh.Password(pass)},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
+	}
+	c, err := ssh.Dial("tcp", addr, cfg)
+	if err != nil {
+		return nil, err
+	}
+	s, err := c.NewSession()
+	if err != nil {
+		c.Close()
+		return nil, err
+	}
+	stdin, err := s.StdinPipe()
+	if err != nil {
+		s.Close()
+		c.Close()
+		return nil, err
+	}
+	stdout, err := s.StdoutPipe()
+	if err != nil {
+		stdin.Close()
+		s.Close()
+		c.Close()
+		return nil, err
+	}
+	stderr, err := s.StderrPipe()
+	if err != nil {
+		stdin.Close()
+		s.Close()
+		c.Close()
+		return nil, err
+	}
+	modes := ssh.TerminalModes{
+		ssh.ECHO:          1,
+		ssh.TTY_OP_ISPEED: 14400,
+		ssh.TTY_OP_OSPEED: 14400,
+	}
+	if err := s.RequestPty("xterm-256color", height, width, modes); err != nil {
+		stdin.Close()
+		s.Close()
+		c.Close()
+		return nil, err
+	}
+	go func() { _ = s.Shell() }()
+	return &TerminalSession{
+		client:  c,
+		session: s,
+		Stdin:   stdin,
+		Stdout:  stdout,
+		Stderr:  stderr,
+	}, nil
+}
+
+func (t *TerminalSession) Close() error {
+	if t == nil {
+		return nil
+	}
+	if t.session != nil {
+		_ = t.session.Close()
+	}
+	if t.client != nil {
+		return t.client.Close()
+	}
+	return nil
 }
 
 func setRaw() func() {
