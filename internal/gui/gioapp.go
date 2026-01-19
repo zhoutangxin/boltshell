@@ -64,6 +64,10 @@ type state struct { // 整个窗口的全局状态，保存所有控件和数据
 	activeSession int                // 当前激活的会话索引（-1 表示没有激活会话）
 
 	lastMessage string // 底部状态栏要显示的提示信息（如“保存成功”“连接失败”等）
+
+	showConnListDialog   bool
+	connListDialogOK     widget.Clickable
+	connListDialogCancel widget.Clickable
 }
 
 type session struct { // 单个 SSH 会话（终端标签页）的状态
@@ -110,33 +114,43 @@ func Start(database *sql.DB, logger *logging.Logger) error { // GUI 程序入口
 			case app.DestroyEvent: // 窗口被关闭
 				return // 结束 goroutine
 			case app.FrameEvent: // 需要绘制一帧界面
-				gtx := app.NewContext(&ops, e)                 // 构造布局上下文，用于布局和绘制
-				layout.Flex{Axis: layout.Vertical}.Layout(gtx, // 垂直方向整体布局：上中下
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { // 顶部工具栏区域
-						return topBar(gtx, th, database, &st) // 绘制“添加连接/连接列表/显示已删除”
-					}),
-					layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { // 中间主内容区域
-						return layout.Flex{Axis: layout.Horizontal}.Layout(gtx, // 水平：左侧分组 + 右侧内容
-							layout.Rigid(func(gtx layout.Context) layout.Dimensions { // 左侧固定宽度侧边栏
-								width := gtx.Dp(unit.Dp(220))          // 侧边栏宽度 220dp
-								gtx.Constraints.Min.X = width          // 最小宽度设为 220
-								gtx.Constraints.Max.X = width          // 最大宽度也设为 220（固定宽）
-								return sidebar(gtx, th, database, &st) // 绘制分组列表
+				gtx := app.NewContext(&ops, e) // 构造布局上下文，用于布局和绘制
+				layout.Stack{}.Layout(gtx,
+					layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+						return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+								return topBar(gtx, th, database, &st)
 							}),
-							layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { // 右侧弹性区域
-								if st.pageList { // 如果当前为“连接列表”页
-									return listPage(gtx, th, database, &st) // 显示连接列表+终端区域
+							layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+								return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+									layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+										width := gtx.Dp(unit.Dp(220))
+										gtx.Constraints.Min.X = width
+										gtx.Constraints.Max.X = width
+										return sidebar(gtx, th, database, &st)
+									}),
+									layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+										if st.pageList {
+											return listPage(gtx, th, database, &st)
+										}
+										return addPage(gtx, th, database, &st)
+									}),
+								)
+							}),
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+								if st.lastMessage == "" {
+									return layout.Dimensions{}
 								}
-								return addPage(gtx, th, database, &st) // 否则显示“添加连接”页面
+								lbl := material.Body1(th, st.lastMessage)
+								return lbl.Layout(gtx)
 							}),
 						)
 					}),
-					layout.Rigid(func(gtx layout.Context) layout.Dimensions { // 底部状态栏区域
-						if st.lastMessage == "" { // 如果没有消息要显示
-							return layout.Dimensions{} // 返回空尺寸，不占空间
+					layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+						if !st.showConnListDialog {
+							return layout.Dimensions{}
 						}
-						lbl := material.Body1(th, st.lastMessage) // 用 Body1 样式显示状态文字
-						return lbl.Layout(gtx)                    // 绘制状态文字
+						return drawConnListDialog(gtx, th, database, &st)
 					}),
 				)
 				e.Frame(gtx.Ops) // 提交本帧的绘制操作到窗口
@@ -258,7 +272,13 @@ func listPage(gtx layout.Context, th *material.Theme, database *sql.DB, st *stat
 					)
 				})
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { // 中间：会话和终端区域
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { // 会话 Tab 区域
+				if len(st.sessions) == 0 {
+					return layout.Dimensions{}
+				}
+				return sessionTabsBar(gtx, th, st)
+			}),
+			layout.Rigid(func(gtx layout.Context) layout.Dimensions { // 底部：终端区域
 				if len(st.sessions) == 0 { // 没有打开任何会话则不显示
 					return layout.Dimensions{}
 				}
@@ -338,7 +358,7 @@ func topBar(gtx layout.Context, th *material.Theme, database *sql.DB, st *state)
 	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Horizontal}.Layout(gtx, // 水平排列按钮
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { // “添加连接”按钮
-				btn := material.Button(th, &st.tabAdd, "添加连接")
+				btn := material.Button(th, &st.tabAdd, "添加连接2")
 				if !st.pageList { // 如果当前已经在添加页，高亮或改变背景
 					btn.Background = th.Palette.ContrastBg
 				}
@@ -353,9 +373,8 @@ func topBar(gtx layout.Context, th *material.Theme, database *sql.DB, st *state)
 				if st.pageList { // 如果当前在列表页，高亮
 					btn.Background = th.Palette.ContrastBg
 				}
-				if st.tabList.Clicked(gtx) { // 点击时切换到列表页并刷新数据
-					st.pageList = true
-					loadList(database, st)
+				if st.tabList.Clicked(gtx) {
+					st.showConnListDialog = true
 				}
 				return btn.Layout(gtx)
 			}),
@@ -413,6 +432,103 @@ func sidebar(gtx layout.Context, th *material.Theme, database *sql.DB, st *state
 				})
 			}),
 		)
+	})
+}
+
+func drawConnListDialog(gtx layout.Context, th *material.Theme, database *sql.DB, st *state) layout.Dimensions {
+	max := gtx.Constraints.Max
+	defer clip.Rect{Max: max}.Push(gtx.Ops).Pop()
+	paint.ColorOp{Color: color.NRGBA{A: 0x80}}.Add(gtx.Ops)
+	paint.PaintOp{}.Add(gtx.Ops)
+
+	dialogWidth := gtx.Dp(unit.Dp(720))
+	dialogHeight := gtx.Dp(unit.Dp(420))
+	size := image.Pt(dialogWidth, dialogHeight)
+
+	return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+		gtx.Constraints.Min = size
+		gtx.Constraints.Max = size
+		defer clip.Rect{Max: size}.Push(gtx.Ops).Pop()
+		paint.ColorOp{Color: color.NRGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}}.Add(gtx.Ops)
+		paint.PaintOp{}.Add(gtx.Ops)
+		inset := layout.UniformInset(unit.Dp(16))
+		return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
+				layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+					l := material.List(th, &st.connList)
+					return l.Layout(gtx, len(st.items), func(gtx layout.Context, i int) layout.Dimensions {
+						it := st.items[i]
+						connect := &st.connectBtns[i]
+						remove := &st.removeBtns[i]
+						return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+							layout.Rigid(material.Body1(th, it.Name).Layout),
+							layout.Rigid(spacer),
+							layout.Rigid(material.Body1(th, it.Host).Layout),
+							layout.Rigid(spacer),
+							layout.Rigid(material.Body1(th, strconv.Itoa(it.Port)).Layout),
+							layout.Rigid(spacer),
+							layout.Rigid(material.Body1(th, it.User).Layout),
+							layout.Rigid(spacer),
+							layout.Rigid(material.Body1(th, it.GroupName).Layout),
+							layout.Rigid(spacer),
+							layout.Rigid(material.Body1(th, strconv.Itoa(it.Enabled)).Layout),
+							layout.Rigid(spacer),
+							layout.Rigid(material.Body1(th, strconv.FormatInt(it.CreatedAt, 10)).Layout),
+							layout.Rigid(spacer),
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+								btn := material.Button(th, connect, "连接")
+								if connect.Clicked(gtx) {
+									openSession(th, st, it)
+								}
+								return btn.Layout(gtx)
+							}),
+							layout.Rigid(spacer),
+							layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+								text := "删除"
+								if it.Deleted == 1 {
+									text = "恢复"
+								}
+								btn := material.Button(th, remove, text)
+								if remove.Clicked(gtx) {
+									d := 1
+									if it.Deleted == 1 {
+										d = 0
+									}
+									if err := db.SetDeleted(database, it.ID, d); err != nil {
+										st.lastMessage = err.Error()
+									} else {
+										loadList(database, st)
+									}
+								}
+								return btn.Layout(gtx)
+							}),
+						)
+					})
+				}),
+				layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+						layout.Flexed(1, func(gtx layout.Context) layout.Dimensions {
+							return layout.Dimensions{}
+						}),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							btn := material.Button(th, &st.refreshBtn, "刷新")
+							if st.refreshBtn.Clicked(gtx) {
+								loadList(database, st)
+							}
+							return btn.Layout(gtx)
+						}),
+						layout.Rigid(spacer),
+						layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+							btn := material.Button(th, &st.connListDialogOK, "关闭")
+							if st.connListDialogOK.Clicked(gtx) {
+								st.showConnListDialog = false
+							}
+							return btn.Layout(gtx)
+						}),
+					)
+				}),
+			)
+		})
 	})
 }
 
@@ -510,262 +626,255 @@ func appendTerminalOutput(log *string, raw []byte) {
 	*log += text
 }
 
-func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dimensions { // 下方会话列表+终端区域
+func sessionTabsBar(gtx layout.Context, th *material.Theme, st *state) layout.Dimensions {
+	return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+		func() []layout.FlexChild {
+			var children []layout.FlexChild
+			for i := range st.sessions {
+				i := i
+				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+					btn := &st.sessionTabs[i]
+					label := st.sessions[i].title
+					return material.Clickable(gtx, btn, func(gtx layout.Context) layout.Dimensions {
+						if btn.Clicked(gtx) {
+							st.activeSession = i
+						}
+						pad := layout.UniformInset(unit.Dp(4))
+						return pad.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+							lbl := material.Body1(th, label)
+							if st.activeSession == i {
+								lbl.Font.Weight = 600
+							}
+							return lbl.Layout(gtx)
+						})
+					})
+				}))
+				children = append(children, layout.Rigid(spacer))
+			}
+			return children
+		}()...,
+	)
+}
+
+func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dimensions { // 下方会话终端区域
 	inset := layout.UniformInset(unit.Dp(8)) // 整个区域四周留 8dp 内边距
 	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		defer clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops).Pop()                      // 限制绘制区域，避免溢出
 		paint.ColorOp{Color: color.NRGBA{R: 0x12, G: 0x1b, B: 0x2b, A: 0xff}}.Add(gtx.Ops) // 设置深色背景
 		paint.PaintOp{}.Add(gtx.Ops)                                                       // 实际填充背景颜色
-		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,                              // 垂直方向：上 Tab，下面终端内容
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { // 上方会话 Tab 区域
-				return layout.Flex{Axis: layout.Horizontal}.Layout(gtx, // 水平方向排列多个 Tab
-					func() []layout.FlexChild {
-						var children []layout.FlexChild // 存放所有 Tab 的子项
-						for i := range st.sessions {    // 为每个会话生成一个 Tab
-							i := i // 防止闭包捕获同一个 i
-							children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
-								btn := &st.sessionTabs[i]     // 对应第 i 个会话的 Tab 按钮
-								label := st.sessions[i].title // Tab 显示的标题文字
-								return material.Clickable(gtx, btn, func(gtx layout.Context) layout.Dimensions {
-									if btn.Clicked(gtx) { // 如果用户点击了该 Tab
-										st.activeSession = i // 切换当前激活会话
-									}
-									pad := layout.UniformInset(unit.Dp(4)) // Tab 内部四周 4dp 内边距
-									return pad.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-										lbl := material.Body1(th, label) // Tab 内部的文字标签
-										if st.activeSession == i {       // 如果是当前激活 Tab
-											lbl.Font.Weight = 600 // 字体加粗显示
-										}
-										return lbl.Layout(gtx) // 绘制 Tab 文本
-									})
-								})
-							}))
-							children = append(children, layout.Rigid(spacer)) // 每个 Tab 之间插入一个空隙
-						}
-						return children // 返回所有 Tab 组成的列表
-					}()...,
+		if st.activeSession < 0 || st.activeSession >= len(st.sessions) {
+			return layout.Dimensions{}
+		}
+		s := &st.sessions[st.activeSession]
+		outInset := layout.UniformInset(unit.Dp(4))
+		return outInset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+			area := clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops)
+			event.Op(gtx.Ops, s)
+			area.Pop()
+
+			gtx.Execute(key.FocusCmd{Tag: s})
+
+			for {
+				ev, ok := gtx.Event(
+					key.FocusFilter{Target: s},
+					pointer.Filter{Target: s, Kinds: pointer.Press},
+					key.Filter{Focus: s, Name: key.NameReturn},
+					key.Filter{Focus: s, Name: key.NameEnter},
+					key.Filter{Focus: s, Name: key.NameTab},
+					key.Filter{Focus: s, Name: key.NameDeleteBackward},
+					key.Filter{Focus: s, Name: key.NameDeleteForward},
+					key.Filter{Focus: s, Name: "C", Required: key.ModShortcut | key.ModShift},
+					key.Filter{Focus: s, Name: "V", Required: key.ModShortcut | key.ModShift},
+					key.Filter{Focus: s},
+					pointer.Filter{Target: s},
 				)
-			}),
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { // 下方终端内容区域（占用剩余空间）
-				if st.activeSession < 0 || st.activeSession >= len(st.sessions) { // 没有激活会话
-					return layout.Dimensions{} // 不绘制任何内容
+				if !ok {
+					break
 				}
-				s := &st.sessions[st.activeSession] // 取当前激活会话
-				outInset := layout.UniformInset(unit.Dp(4))
-				return outInset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-					// 把当前会话 s 注册为可接收键盘事件的目标
-					// 这样键盘输入（回车、Tab、方向键等）就会发给该会话，而不是其它控件
-					area := clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops)
-					event.Op(gtx.Ops, s)
-					area.Pop()
+				switch e := ev.(type) {
+				case key.Event:
+					if e.State != key.Press {
+						continue
+					}
 
-					gtx.Execute(key.FocusCmd{Tag: s})
-
-					for {
-						ev, ok := gtx.Event(
-							key.FocusFilter{Target: s},
-							pointer.Filter{Target: s, Kinds: pointer.Press},
-							key.Filter{Focus: s, Name: key.NameReturn},
-							key.Filter{Focus: s, Name: key.NameEnter},
-							key.Filter{Focus: s, Name: key.NameTab},
-							key.Filter{Focus: s, Name: key.NameDeleteBackward},
-							key.Filter{Focus: s, Name: key.NameDeleteForward},
-							key.Filter{Focus: s, Name: "C", Required: key.ModShortcut | key.ModShift},
-							key.Filter{Focus: s, Name: "V", Required: key.ModShortcut | key.ModShift},
-							key.Filter{Focus: s},
-							pointer.Filter{Target: s},
-						)
-						if !ok {
-							break
-						}
-						switch e := ev.(type) {
-						case key.Event:
-							if e.State != key.Press {
-								continue
-							}
-
-							if (e.Modifiers & (key.ModShortcut | key.ModShift)) == (key.ModShortcut | key.ModShift) {
-								nameStr := string(e.Name)
-								if nameStr == "C" || nameStr == "c" {
-									text := getCopyTextForSession(s)
-									if text != "" {
-										if guiLogger != nil {
-											guiLogger.Info("GUI Copy terminal selectedText len=%d", len(text))
-										}
-										if err := clipboard.WriteAll(text); err != nil {
-											s.log += "\n错误:\n" + err.Error()
-											if invalidateWindow != nil {
-												invalidateWindow()
-											}
-											st.lastMessage = "复制到剪贴板失败"
-										} else {
-											st.lastMessage = "已复制选中内容到剪贴板"
-										}
-									}
-									continue
+					if (e.Modifiers & (key.ModShortcut | key.ModShift)) == (key.ModShortcut | key.ModShift) {
+						nameStr := string(e.Name)
+						if nameStr == "C" || nameStr == "c" {
+							text := getCopyTextForSession(s)
+							if text != "" {
+								if guiLogger != nil {
+									guiLogger.Info("GUI Copy terminal selectedText len=%d", len(text))
 								}
-								if nameStr == "V" || nameStr == "v" {
-									if s.term == nil || s.term.Stdin == nil {
-										st.lastMessage = "当前会话未连接，无法粘贴"
-										continue
-									}
-									text, err := clipboard.ReadAll()
-									if err != nil {
-										s.log += "\n错误:\n" + err.Error()
-										if invalidateWindow != nil {
-											invalidateWindow()
-										}
-										st.lastMessage = "读取剪贴板失败"
-										continue
-									}
-									if text != "" {
-										if _, err := s.term.Stdin.Write([]byte(text)); err != nil {
-											s.log += "\n错误:\n" + err.Error()
-											if invalidateWindow != nil {
-												invalidateWindow()
-											}
-											st.lastMessage = "粘贴失败"
-										}
-									}
-									continue
-								}
-							}
-
-							if s.term == nil || s.term.Stdin == nil {
-								continue
-							}
-
-							nameStr := string(e.Name) // 统一取出键名（部分平台会给出特殊符号）
-							var r rune
-							if len(nameStr) > 0 {
-								r, _ = utf8.DecodeRuneInString(nameStr)
-							}
-							var data string // 要发送到远端的控制序列字符串
-							switch e.Name { // 根据按键名称决定发送什么
-							case key.NameReturn, key.NameEnter: // 回车键
-								data = "\n" // 发送换行符
-							case key.NameTab: // Tab 键
-								data = "\t" // 发送制表符
-							case key.NameDeleteBackward: // 退格键（Backspace）
-								data = "\x7f" // 默认发送 DEL(0x7f)，与常见 Linux erase = ^? 一致
-							case key.NameDeleteForward: // Delete 键
-								data = "\x1b[3~" // ANSI 序列：Delete
-							case key.NameLeftArrow: // 左方向键
-								data = "\x1b[D"
-							case key.NameRightArrow: // 右方向键
-								data = "\x1b[C"
-							case key.NameUpArrow: // 上方向键
-								data = "\x1b[A"
-							case key.NameDownArrow: // 下方向键
-								data = "\x1b[B"
-							case key.NameHome: // Home 键
-								data = "\x1b[H"
-							case key.NameEnd: // End 键
-								data = "\x1b[F"
-							case key.NamePageUp: // PageUp 键
-								data = "\x1b[5~"
-							case key.NamePageDown: // PageDown 键
-								data = "\x1b[6~"
-							case key.NameEscape: // ESC 键
-								data = "\x1b"
-							default:
-								data = "" // 其它特殊键暂时不处理
-							}
-
-							// 兼容处理：部分平台把退格键/删除键映射为特殊 Unicode 符号
-							if data == "" && len(nameStr) > 0 {
-								switch r {
-								case '\b', 0x7f, 0x232B: // \b、DEL 或“⌫”
-									data = "\x7f"
-								case 0x2326: // “⌦”
-									data = "\x1b[3~"
-								}
-							}
-
-							if guiLogger != nil && (e.Name == key.NameDeleteBackward || e.Name == key.NameDeleteForward ||
-								r == '\b' || r == 0x7f || r == 0x232B || r == 0x2326) {
-								guiLogger.Info("GUI KeyEvent delete name=%q rune=%U data_hex=%x", nameStr, r, []byte(data))
-							}
-
-							if data != "" { // 如果有数据要发
-								// 这里不再记录 SendData 的详细内容，避免日志中出现难以辨认的控制字符
-								_, err := s.term.Stdin.Write([]byte(data)) // 写入远端终端的标准输入
-								if err != nil {                            // 写入失败
-									s.log += "\n错误:\n" + err.Error() // 在终端日志里追加错误信息
-									if invalidateWindow != nil {     // 请求窗口重绘
-										invalidateWindow()
-									}
-									st.lastMessage = "命令发送失败" // 底部状态栏提示失败
-								}
-							}
-						case key.EditEvent:
-							if s.term == nil || s.term.Stdin == nil {
-								continue
-							}
-							if e.Text != "" {
-
-								_, err := s.term.Stdin.Write([]byte(e.Text)) // 直接把文字写到远端
-								if err != nil {
+								if err := clipboard.WriteAll(text); err != nil {
 									s.log += "\n错误:\n" + err.Error()
 									if invalidateWindow != nil {
 										invalidateWindow()
 									}
-									st.lastMessage = "命令发送失败"
+									st.lastMessage = "复制到剪贴板失败"
+								} else {
+									st.lastMessage = "已复制选中内容到剪贴板"
 								}
+							}
+							continue
+						}
+						if nameStr == "V" || nameStr == "v" {
+							if s.term == nil || s.term.Stdin == nil {
+								st.lastMessage = "当前会话未连接，无法粘贴"
 								continue
 							}
-
-							if e.Range.End > e.Range.Start {
-								count := e.Range.End - e.Range.Start // 需要删除的字符数
-
-								if count > 0 {
-									buf := make([]byte, count) // 构造多个退格控制码
-									for i := 0; i < count; i++ {
-										buf[i] = 0x7f // 每个字符用 DEL(0x7f) 表示删除
-									}
-									if guiLogger != nil {
-										guiLogger.Info("GUI EditEvent delete count=%d data_hex=%x", count, buf)
-									}
-									_, err := s.term.Stdin.Write(buf) // 发送删除控制码到远端
-									if err != nil {
-										s.log += "\n错误:\n" + err.Error()
-										if invalidateWindow != nil {
-											invalidateWindow()
-										}
-										st.lastMessage = "命令发送失败"
-									}
-								}
-							}
-						case pointer.Event:
-							if e.Kind == pointer.Press {
-								if e.Buttons == pointer.ButtonSecondary {
-									s.contextMenuOpen = true
-								} else {
-									s.contextMenuOpen = false
-								}
+							text, err := clipboard.ReadAll()
+							if err != nil {
+								s.log += "\n错误:\n" + err.Error()
 								if invalidateWindow != nil {
 									invalidateWindow()
 								}
+								st.lastMessage = "读取剪贴板失败"
+								continue
 							}
-						default:
+							if text != "" {
+								if _, err := s.term.Stdin.Write([]byte(text)); err != nil {
+									s.log += "\n错误:\n" + err.Error()
+									if invalidateWindow != nil {
+										invalidateWindow()
+									}
+									st.lastMessage = "粘贴失败"
+								}
+							}
 							continue
 						}
 					}
 
-					return layout.Stack{}.Layout(gtx,
-						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-							return layoutAnsiText(gtx, th, &s.logList, s.log, true)
-						}),
-						layout.Stacked(func(gtx layout.Context) layout.Dimensions {
-							if !s.contextMenuOpen || s.log == "" {
-								return layout.Dimensions{}
+					if s.term == nil || s.term.Stdin == nil {
+						continue
+					}
+
+					nameStr := string(e.Name)
+					var r rune
+					if len(nameStr) > 0 {
+						r, _ = utf8.DecodeRuneInString(nameStr)
+					}
+					var data string
+					switch e.Name {
+					case key.NameReturn, key.NameEnter:
+						data = "\n"
+					case key.NameTab:
+						data = "\t"
+					case key.NameDeleteBackward:
+						data = "\x7f"
+					case key.NameDeleteForward:
+						data = "\x1b[3~"
+					case key.NameLeftArrow:
+						data = "\x1b[D"
+					case key.NameRightArrow:
+						data = "\x1b[C"
+					case key.NameUpArrow:
+						data = "\x1b[A"
+					case key.NameDownArrow:
+						data = "\x1b[B"
+					case key.NameHome:
+						data = "\x1b[H"
+					case key.NameEnd:
+						data = "\x1b[F"
+					case key.NamePageUp:
+						data = "\x1b[5~"
+					case key.NamePageDown:
+						data = "\x1b[6~"
+					case key.NameEscape:
+						data = "\x1b"
+					default:
+						data = ""
+					}
+
+					if data == "" && len(nameStr) > 0 {
+						switch r {
+						case '\b', 0x7f, 0x232B:
+							data = "\x7f"
+						case 0x2326:
+							data = "\x1b[3~"
+						}
+					}
+
+					if guiLogger != nil && (e.Name == key.NameDeleteBackward || e.Name == key.NameDeleteForward ||
+						r == '\b' || r == 0x7f || r == 0x232B || r == 0x2326) {
+						guiLogger.Info("GUI KeyEvent delete name=%q rune=%U data_hex=%x", nameStr, r, []byte(data))
+					}
+
+					if data != "" {
+						_, err := s.term.Stdin.Write([]byte(data))
+						if err != nil {
+							s.log += "\n错误:\n" + err.Error()
+							if invalidateWindow != nil {
+								invalidateWindow()
 							}
-							return drawSelectionToolbar(gtx, th, s, st)
-						}),
-					)
-				})
-			}),
-		)
+							st.lastMessage = "命令发送失败"
+						}
+					}
+				case key.EditEvent:
+					if s.term == nil || s.term.Stdin == nil {
+						continue
+					}
+					if e.Text != "" {
+
+						_, err := s.term.Stdin.Write([]byte(e.Text))
+						if err != nil {
+							s.log += "\n错误:\n" + err.Error()
+							if invalidateWindow != nil {
+								invalidateWindow()
+							}
+							st.lastMessage = "命令发送失败"
+						}
+						continue
+					}
+
+					if e.Range.End > e.Range.Start {
+						count := e.Range.End - e.Range.Start
+
+						if count > 0 {
+							buf := make([]byte, count)
+							for i := 0; i < count; i++ {
+								buf[i] = 0x7f
+							}
+							if guiLogger != nil {
+								guiLogger.Info("GUI EditEvent delete count=%d data_hex=%x", count, buf)
+							}
+							_, err := s.term.Stdin.Write(buf)
+							if err != nil {
+								s.log += "\n错误:\n" + err.Error()
+								if invalidateWindow != nil {
+									invalidateWindow()
+								}
+								st.lastMessage = "命令发送失败"
+							}
+						}
+					}
+				case pointer.Event:
+					if e.Kind == pointer.Press {
+						if e.Buttons == pointer.ButtonSecondary {
+							s.contextMenuOpen = true
+						} else {
+							s.contextMenuOpen = false
+						}
+						if invalidateWindow != nil {
+							invalidateWindow()
+						}
+					}
+				default:
+					continue
+				}
+			}
+
+			return layout.Stack{}.Layout(gtx,
+				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+					return layoutAnsiText(gtx, th, &s.logList, s.log, true)
+				}),
+				layout.Stacked(func(gtx layout.Context) layout.Dimensions {
+					if !s.contextMenuOpen || s.log == "" {
+						return layout.Dimensions{}
+					}
+					return drawSelectionToolbar(gtx, th, s, st)
+				}),
+			)
+		})
 	})
 }
 
