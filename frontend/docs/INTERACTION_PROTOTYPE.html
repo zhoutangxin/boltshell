@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SSH-Go 前端交互原型 V2</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      background: #0b1220;
+      color: #e5e7eb;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ===== 顶部 Tab 栏 ===== */
+    .top-bar {
+      height: 36px;
+      background: #e8eef5;
+      display: flex;
+      align-items: center;
+      border-bottom: 1px solid #c5d0de;
+      flex-shrink: 0;
+    }
+    .btn-conn-mgr {
+      width: 36px;
+      height: 36px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      color: #475569;
+      flex-shrink: 0;
+    }
+    .btn-conn-mgr:hover { background: #d4dde8; }
+    .btn-conn-mgr.active { background: #c5d5e8; }
+
+    .tabs {
+      display: flex;
+      align-items: flex-end;
+      gap: 2px;
+      overflow-x: auto;
+      flex: 1;
+      height: 100%;
+      padding-top: 4px;
+    }
+    .tab {
+      background: #d8e3f0;
+      border: 1px solid #b8c8d8;
+      border-bottom: none;
+      color: #334155;
+      padding: 5px 12px;
+      border-radius: 6px 6px 0 0;
+      cursor: pointer;
+      white-space: nowrap;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 30px;
+    }
+    .tab.active {
+      background: #0b1220;
+      color: #e5e7eb;
+      border-color: #0b1220;
+    }
+    .tab .dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; }
+    .tab .close { opacity: 0.5; font-size: 13px; margin-left: 2px; }
+    .tab .close:hover { opacity: 1; color: #ef4444; }
+
+    /* ===== 主区域：全屏终端 ===== */
+    .main-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+      background: #0b1220;
+    }
+    .terminal-empty {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: #64748b;
+      font-size: 13px;
+      gap: 12px;
+    }
+    .terminal-empty .hint-btn {
+      background: #1e3a5f;
+      border: 1px solid #2563eb;
+      color: #93c5fd;
+      padding: 8px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .terminal-empty .hint-btn:hover { background: #2563eb; color: #fff; }
+
+    .terminal-wrap {
+      position: absolute;
+      inset: 0;
+      display: none;
+      flex-direction: column;
+    }
+    .terminal-wrap.active { display: flex; }
+    .terminal-toolbar {
+      height: 28px;
+      background: #0f1c33;
+      border-bottom: 1px solid #1d2a45;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 10px;
+      flex-shrink: 0;
+    }
+    .terminal-toolbar button {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      font-size: 11px;
+      cursor: pointer;
+      padding: 3px 8px;
+      border-radius: 4px;
+    }
+    .terminal-toolbar button:hover { background: #1d2a45; color: #e5e7eb; }
+    .terminal-screen {
+      flex: 1;
+      min-height: 0;
+      background: #0b1220;
+      padding: 8px 12px;
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #e5e7eb;
+      overflow: auto;
+      white-space: pre-wrap;
+    }
+    .terminal-input-row {
+      display: flex;
+      border-top: 1px solid #1d2a45;
+      background: #0e1930;
+      flex-shrink: 0;
+    }
+    .terminal-prompt {
+      padding: 8px 0 8px 12px;
+      color: #4ade80;
+      font-family: monospace;
+      font-size: 13px;
+    }
+    .terminal-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: #e5e7eb;
+      font-family: monospace;
+      font-size: 13px;
+      padding: 8px 12px 8px 0;
+      outline: none;
+    }
+
+    /* ===== 连接管理器弹框 ===== */
+    .mgr-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 200;
+      align-items: flex-start;
+      justify-content: flex-start;
+      padding: 48px 0 0 4px;
+    }
+    .mgr-backdrop.show { display: flex; }
+
+    .conn-mgr {
+      width: 720px;
+      height: 520px;
+      background: #f5f7fa;
+      border: 1px solid #b0bec5;
+      border-radius: 4px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+      display: flex;
+      flex-direction: column;
+      color: #1e293b;
+      overflow: hidden;
+    }
+
+    /* 标题栏 */
+    .mgr-titlebar {
+      height: 32px;
+      background: linear-gradient(180deg, #e8eef5, #d4dde8);
+      border-bottom: 1px solid #b0bec5;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      flex-shrink: 0;
+    }
+    .mgr-titlebar .title {
+      flex: 1;
+      font-size: 12px;
+      color: #334155;
+      font-weight: 600;
+    }
+    .mgr-titlebar .win-btn {
+      width: 24px;
+      height: 20px;
+      border: 1px solid #b0bec5;
+      background: #e8eef5;
+      cursor: pointer;
+      font-size: 11px;
+      color: #475569;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-left: 4px;
+    }
+    .mgr-titlebar .win-btn:hover { background: #fff; }
+    .mgr-titlebar .win-btn.close:hover { background: #ef4444; color: #fff; border-color: #ef4444; }
+
+    /* 工具栏 */
+    .mgr-toolbar {
+      height: 36px;
+      background: #eef2f7;
+      border-bottom: 1px solid #d0d8e4;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .mgr-tool-btn {
+      width: 28px;
+      height: 28px;
+      border: 1px solid transparent;
+      background: transparent;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 14px;
+      color: #475569;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .mgr-tool-btn:hover { background: #d8e3f0; border-color: #b0bec5; }
+    .mgr-tool-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .mgr-tool-sep { width: 1px; height: 20px; background: #c5d0de; margin: 0 4px; }
+
+    .mgr-search-area {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .mgr-search-area input {
+      width: 140px;
+      height: 24px;
+      border: 1px solid #b0bec5;
+      border-radius: 3px;
+      padding: 0 8px;
+      font-size: 12px;
+      background: #fff;
+    }
+    .mgr-search-area select {
+      height: 24px;
+      border: 1px solid #b0bec5;
+      border-radius: 3px;
+      font-size: 12px;
+      background: #fff;
+      padding: 0 4px;
+    }
+    .mgr-search-area label {
+      font-size: 11px;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+    }
+
+    /* 连接列表 */
+    .mgr-list-header {
+      display: grid;
+      grid-template-columns: 1fr 160px 60px 80px;
+      background: #e8eef5;
+      border-bottom: 1px solid #d0d8e4;
+      font-size: 11px;
+      color: #64748b;
+      padding: 4px 8px;
+      flex-shrink: 0;
+    }
+    .mgr-list-body {
+      flex: 1;
+      overflow: auto;
+      background: #fff;
+    }
+
+    /* 分组文件夹行 */
+    .mgr-folder {
+      display: grid;
+      grid-template-columns: 1fr 160px 60px 80px;
+      padding: 5px 8px;
+      font-size: 12px;
+      cursor: pointer;
+      border-bottom: 1px solid #f0f4f8;
+      align-items: center;
+      user-select: none;
+    }
+    .mgr-folder:hover { background: #f0f6ff; }
+    .mgr-folder .folder-name {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 600;
+      color: #334155;
+    }
+    .mgr-folder .arrow {
+      font-size: 10px;
+      color: #94a3b8;
+      width: 12px;
+      display: inline-block;
+      transition: transform 0.15s;
+    }
+    .mgr-folder.collapsed .arrow { transform: rotate(-90deg); }
+
+    /* 连接行 */
+    .mgr-conn {
+      display: grid;
+      grid-template-columns: 1fr 160px 60px 80px;
+      padding: 5px 8px 5px 28px;
+      font-size: 12px;
+      cursor: pointer;
+      border-bottom: 1px solid #f8fafc;
+      align-items: center;
+      color: #334155;
+    }
+    .mgr-conn:hover { background: #f0f6ff; }
+    .mgr-conn.selected { background: #dbeafe; }
+    .mgr-conn.deleted { opacity: 0.45; }
+    .mgr-conn .conn-name {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .mgr-conn .conn-icon { color: #3b82f6; font-size: 13px; }
+    .mgr-conn .col-host { color: #64748b; }
+    .mgr-conn .col-port, .mgr-conn .col-user { color: #64748b; text-align: left; }
+
+    .mgr-empty {
+      padding: 40px;
+      text-align: center;
+      color: #94a3b8;
+      font-size: 13px;
+    }
+
+    /* 底部栏 */
+    .mgr-footer {
+      height: 36px;
+      background: #eef2f7;
+      border-top: 1px solid #d0d8e4;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      gap: 12px;
+      flex-shrink: 0;
+      font-size: 12px;
+      color: #475569;
+    }
+    .mgr-footer select {
+      height: 24px;
+      border: 1px solid #b0bec5;
+      border-radius: 3px;
+      font-size: 12px;
+      background: #fff;
+      padding: 0 4px;
+    }
+    .mgr-footer label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      margin-left: auto;
+    }
+    .mgr-status {
+      font-size: 11px;
+      color: #2563eb;
+      padding: 0 8px;
+      min-height: 16px;
+    }
+
+    /* ===== 新增连接子弹窗 ===== */
+    .add-backdrop {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.3);
+      z-index: 300;
+      align-items: center;
+      justify-content: center;
+    }
+    .add-backdrop.show { display: flex; }
+    .add-modal {
+      width: 440px;
+      background: #f5f7fa;
+      border: 1px solid #b0bec5;
+      border-radius: 4px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+      color: #1e293b;
+    }
+    .add-titlebar {
+      height: 32px;
+      background: linear-gradient(180deg, #e8eef5, #d4dde8);
+      border-bottom: 1px solid #b0bec5;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .add-body { padding: 16px; }
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .form-field { display: flex; flex-direction: column; gap: 3px; }
+    .form-field label { font-size: 11px; color: #64748b; }
+    .form-field input {
+      height: 28px;
+      padding: 0 8px;
+      border: 1px solid #b0bec5;
+      border-radius: 3px;
+      font-size: 12px;
+      background: #fff;
+    }
+    .form-field input:focus { border-color: #3b82f6; outline: none; }
+    .form-field.invalid input { border-color: #ef4444; }
+    .form-field .err { font-size: 10px; color: #ef4444; display: none; }
+    .form-field.invalid .err { display: block; }
+    .form-row { grid-column: span 2; display: flex; align-items: center; gap: 6px; font-size: 12px; }
+    .add-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .btn {
+      height: 28px;
+      padding: 0 16px;
+      border-radius: 3px;
+      font-size: 12px;
+      cursor: pointer;
+      border: 1px solid #b0bec5;
+      background: #e8eef5;
+      color: #334155;
+    }
+    .btn:hover { background: #d4dde8; }
+    .btn-primary { background: #2563eb; border-color: #1d4ed8; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+
+    .proto-hint {
+      position: fixed;
+      bottom: 8px;
+      right: 8px;
+      background: rgba(30,41,59,0.9);
+      border: 1px solid #334155;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 10px;
+      color: #94a3b8;
+      z-index: 50;
+    }
+  </style>
+</head>
+<body style="display:flex;flex-direction:column;height:100vh;">
+
+  <!-- 顶部 Tab 栏 -->
+  <div class="top-bar">
+    <button class="btn-conn-mgr" id="btnConnMgr" title="连接管理器">📁</button>
+    <div class="tabs" id="sessionTabs"></div>
+  </div>
+
+  <!-- 主区域：全屏终端 -->
+  <div class="main-area" id="mainArea">
+    <div class="terminal-empty" id="terminalEmpty">
+      <span>暂无活动会话</span>
+      <button class="hint-btn" id="btnOpenMgrHint">打开连接管理器</button>
+    </div>
+    <div class="terminal-wrap" id="terminalWrap">
+      <div class="terminal-toolbar">
+        <button id="btnClear">清屏</button>
+        <button id="btnCopy">复制</button>
+        <button id="btnPaste">粘贴</button>
+      </div>
+      <div class="terminal-screen" id="terminalScreen"></div>
+      <div class="terminal-input-row">
+        <span class="terminal-prompt" id="terminalPrompt">$</span>
+        <input class="terminal-input" id="terminalInput" autocomplete="off" spellcheck="false" />
+      </div>
+    </div>
+  </div>
+
+  <!-- 连接管理器弹框 -->
+  <div class="mgr-backdrop" id="mgrBackdrop">
+    <div class="conn-mgr" id="connMgr">
+      <div class="mgr-titlebar">
+        <span class="title">连接管理器</span>
+        <button class="win-btn" id="btnMgrMin" title="最小化">─</button>
+        <button class="win-btn close" id="btnMgrClose" title="关闭">✕</button>
+      </div>
+
+      <div class="mgr-toolbar">
+        <button class="mgr-tool-btn" id="btnAddConn" title="新建连接">➕</button>
+        <button class="mgr-tool-btn" id="btnAddFolder" title="新建文件夹">📁+</button>
+        <button class="mgr-tool-btn" id="btnDelConn" title="删除" disabled>🗑</button>
+        <span class="mgr-tool-sep"></span>
+        <button class="mgr-tool-btn" id="btnRefresh" title="刷新">🔄</button>
+        <div class="mgr-search-area">
+          <input type="text" id="searchInput" placeholder="搜索连接..." />
+          <select id="groupFilter">
+            <option value="">全部</option>
+          </select>
+          <label><input type="checkbox" id="showDeleted" /> 显示已删除</label>
+        </div>
+      </div>
+
+      <div class="mgr-list-header">
+        <span>名称</span>
+        <span>主机</span>
+        <span>端口</span>
+        <span>用户名</span>
+      </div>
+
+      <div class="mgr-list-body" id="mgrListBody"></div>
+
+      <div class="mgr-status" id="mgrStatus"></div>
+
+      <div class="mgr-footer">
+        <select id="footerFile"><option>文件</option></select>
+        <select id="footerCmd"><option>命令</option></select>
+        <label><input type="checkbox" id="closeAfterConnect" checked /> 连接后关闭窗口</label>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新增连接子弹窗 -->
+  <div class="add-backdrop" id="addBackdrop">
+    <div class="add-modal">
+      <div class="add-titlebar">新建连接</div>
+      <div class="add-body">
+        <div class="form-grid">
+          <div class="form-field">
+            <label>名称</label>
+            <input id="fName" placeholder="可选，默认同主机" />
+          </div>
+          <div class="form-field" id="fieldHost">
+            <label>主机 *</label>
+            <input id="fHost" placeholder="192.168.1.10" />
+            <span class="err">主机必填</span>
+          </div>
+          <div class="form-field">
+            <label>端口</label>
+            <input id="fPort" value="22" />
+          </div>
+          <div class="form-field" id="fieldUser">
+            <label>用户名 *</label>
+            <input id="fUser" value="root" />
+            <span class="err">用户名必填</span>
+          </div>
+          <div class="form-field" id="fieldPass">
+            <label>密码 *</label>
+            <input id="fPass" type="password" />
+            <span class="err">密码必填</span>
+          </div>
+          <div class="form-field">
+            <label>分组（文件夹）</label>
+            <input id="fGroup" placeholder="如：aliyun" />
+          </div>
+          <div class="form-row">
+            <input type="checkbox" id="fEnabled" checked />
+            <label for="fEnabled">启用</label>
+          </div>
+        </div>
+        <div class="add-actions">
+          <button class="btn" id="btnAddCancel">取消</button>
+          <button class="btn btn-primary" id="btnAddSave">保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="proto-hint">交互原型 V2 · 点击左上角 📁 打开连接管理器</div>
+
+<script>
+// ========== 模拟数据 ==========
+let connections = [
+  { id: '1', name: '192.168.111.30', host: '192.168.111.30', port: 22, user: 'root', group: 'aliyun', enabled: true, deleted: false },
+  { id: '2', name: '192.168.111.32', host: '192.168.111.32', port: 22, user: 'root', group: 'aliyun', enabled: true, deleted: false },
+  { id: '3', name: 'dfg', host: 'fd', port: 22, user: '1', group: 'erw', enabled: true, deleted: false },
+  { id: '4', name: 'server-38020', host: '10.0.0.5', port: 38020, user: 'root', group: 'zt', enabled: true, deleted: false },
+];
+let collapsedGroups = {};
+let selectedConnId = '';
+let searchText = '';
+let groupFilter = '';
+let includeDeleted = false;
+let closeAfterConnect = true;
+
+let sessions = [];
+let activeSessionId = '';
+let nextId = 10;
+
+// ========== DOM ==========
+const $ = (s) => document.querySelector(s);
+const sessionTabs = $('#sessionTabs');
+const terminalEmpty = $('#terminalEmpty');
+const terminalWrap = $('#terminalWrap');
+const terminalScreen = $('#terminalScreen');
+const terminalInput = $('#terminalInput');
+const terminalPrompt = $('#terminalPrompt');
+const mgrListBody = $('#mgrListBody');
+const mgrStatus = $('#mgrStatus');
+const groupFilterEl = $('#groupFilter');
+const btnDelConn = $('#btnDelConn');
+
+function uid() { return String(nextId++); }
+function setMgrStatus(text, type = '') {
+  mgrStatus.textContent = text;
+  mgrStatus.style.color = type === 'error' ? '#ef4444' : type === 'success' ? '#16a34a' : '#2563eb';
+}
+
+// ========== 连接管理器 ==========
+function openMgr() {
+  $('#mgrBackdrop').classList.add('show');
+  $('#btnConnMgr').classList.add('active');
+  renderMgrList();
+}
+function closeMgr() {
+  $('#mgrBackdrop').classList.remove('show');
+  $('#btnConnMgr').classList.remove('active');
+}
+
+function getVisibleConnections() {
+  return connections.filter(c => {
+    if (!includeDeleted && c.deleted) return false;
+    if (groupFilter && c.group !== groupFilter) return false;
+    if (searchText) {
+      const q = searchText.toLowerCase();
+      const hay = `${c.name} ${c.host} ${c.user} ${c.group}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function getGroups() {
+  const set = new Set(connections.map(c => c.group || '未分组'));
+  return Array.from(set).sort();
+}
+
+function renderGroupFilter() {
+  const groups = getGroups();
+  const cur = groupFilterEl.value;
+  groupFilterEl.innerHTML = '<option value="">全部</option>' +
+    groups.map(g => `<option value="${g}">${g}</option>`).join('');
+  groupFilterEl.value = cur;
+}
+
+function renderMgrList() {
+  renderGroupFilter();
+  const list = getVisibleConnections();
+  const groups = [...new Set(list.map(c => c.group || '未分组'))].sort();
+
+  if (list.length === 0) {
+    mgrListBody.innerHTML = '<div class="mgr-empty">暂无连接，点击 ➕ 新建</div>';
+    return;
+  }
+
+  let html = '';
+  for (const g of groups) {
+    const collapsed = collapsedGroups[g];
+    const items = list.filter(c => (c.group || '未分组') === g);
+    html += `
+      <div class="mgr-folder${collapsed ? ' collapsed' : ''}" data-group="${g}">
+        <div class="folder-name" style="grid-column:1/-1">
+          <span class="arrow">▼</span>
+          <span>📁 ${g}</span>
+          <span style="color:#94a3b8;font-weight:400;font-size:11px">(${items.length})</span>
+        </div>
+      </div>`;
+    if (!collapsed) {
+      for (const c of items) {
+        const title = c.name || c.host;
+        html += `
+          <div class="mgr-conn${c.id === selectedConnId ? ' selected' : ''}${c.deleted ? ' deleted' : ''}"
+               data-id="${c.id}" data-group="${g}">
+            <div class="conn-name">
+              <span class="conn-icon">🖥</span>
+              <span>${title}</span>
+            </div>
+            <span class="col-host">${c.host}</span>
+            <span class="col-port">${c.port}</span>
+            <span class="col-user">${c.user}</span>
+          </div>`;
+      }
+    }
+  }
+  mgrListBody.innerHTML = html;
+
+  // 文件夹折叠
+  mgrListBody.querySelectorAll('.mgr-folder').forEach(row => {
+    row.onclick = () => {
+      const g = row.dataset.group;
+      collapsedGroups[g] = !collapsedGroups[g];
+      renderMgrList();
+    };
+  });
+
+  // 连接行选中
+  mgrListBody.querySelectorAll('.mgr-conn').forEach(row => {
+    row.onclick = () => {
+      selectedConnId = row.dataset.id;
+      btnDelConn.disabled = false;
+      renderMgrList();
+    };
+    row.ondblclick = () => connectFromMgr(row.dataset.id);
+  });
+}
+
+// ========== 会话 Tab ==========
+function renderTabs() {
+  sessionTabs.innerHTML = sessions.map((s, i) => `
+    <button class="tab${s.id === activeSessionId ? ' active' : ''}" data-id="${s.id}">
+      <span class="dot"></span>
+      <span>${i + 1} ${s.title}</span>
+      <span class="close" data-close="${s.id}">×</span>
+    </button>
+  `).join('');
+  sessionTabs.querySelectorAll('.tab').forEach(tab => {
+    tab.onclick = (e) => {
+      if (e.target.dataset.close) {
+        closeSession(e.target.dataset.close);
+      } else {
+        switchSession(tab.dataset.id);
+      }
+    };
+  });
+}
+
+function renderTerminal() {
+  const s = sessions.find(x => x.id === activeSessionId);
+  if (!s) {
+    terminalEmpty.style.display = 'flex';
+    terminalWrap.classList.remove('active');
+    return;
+  }
+  terminalEmpty.style.display = 'none';
+  terminalWrap.classList.add('active');
+  terminalScreen.textContent = s.output;
+  terminalScreen.scrollTop = terminalScreen.scrollHeight;
+  terminalPrompt.textContent = s.prompt;
+  terminalInput.value = '';
+}
+
+function renderAll() {
+  renderTabs();
+  renderTerminal();
+}
+
+// ========== 连接逻辑 ==========
+function doConnect(conn) {
+  const exist = sessions.find(s => s.connId === conn.id);
+  if (exist) {
+    activeSessionId = exist.id;
+    setMgrStatus('已切换到已有会话', 'success');
+    renderAll();
+    terminalInput.focus();
+    return true;
+  }
+
+  if (conn.host === 'fd' || !conn.host.includes('.')) {
+    setMgrStatus('连接失败: dial tcp: lookup ' + conn.host + ': no such host', 'error');
+    return false;
+  }
+
+  const sid = uid();
+  sessions.push({
+    id: sid,
+    connId: conn.id,
+    title: conn.name || conn.host,
+    prompt: `[${conn.user}@${conn.host} ~]# `,
+    output: `Last login: ${new Date().toLocaleString()}\n[${conn.user}@${conn.host} ~]# `,
+  });
+  activeSessionId = sid;
+  setMgrStatus('连接成功', 'success');
+  renderAll();
+  terminalInput.focus();
+  return true;
+}
+
+function connectFromMgr(connId) {
+  const conn = connections.find(c => c.id === connId);
+  if (!conn || conn.deleted || !conn.enabled) return;
+  setMgrStatus('正在连接...', '');
+  setTimeout(() => {
+    const ok = doConnect(conn);
+    if (ok && closeAfterConnect) closeMgr();
+  }, 500);
+}
+
+function switchSession(sid) {
+  activeSessionId = sid;
+  renderAll();
+  terminalInput.focus();
+}
+
+function closeSession(sid) {
+  sessions = sessions.filter(s => s.id !== sid);
+  if (activeSessionId === sid) {
+    activeSessionId = sessions.length ? sessions[sessions.length - 1].id : '';
+  }
+  renderAll();
+}
+
+function toggleDelete() {
+  if (!selectedConnId) return;
+  const c = connections.find(x => x.id === selectedConnId);
+  if (!c) return;
+  c.deleted = !c.deleted;
+  setMgrStatus(c.deleted ? '已删除' : '已恢复', 'success');
+  if (c.deleted) selectedConnId = '';
+  btnDelConn.disabled = !selectedConnId;
+  renderMgrList();
+}
+
+// ========== 终端输入 ==========
+terminalInput.addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  const s = sessions.find(x => x.id === activeSessionId);
+  if (!s) return;
+  const cmd = terminalInput.value.trim();
+  if (!cmd) return;
+  s.output += s.prompt + cmd + '\n';
+  if (cmd === 'ls') s.output += 'docker  logs  nacos  hs_err_pid12345.log\n';
+  else if (cmd === 'pwd') s.output += '/root\n';
+  else if (cmd === 'clear') s.output = s.prompt;
+  else s.output += 'bash: ' + cmd + ': command not found\n';
+  s.output += s.prompt;
+  terminalInput.value = '';
+  renderTerminal();
+});
+
+$('#btnClear').onclick = () => {
+  const s = sessions.find(x => x.id === activeSessionId);
+  if (s) { s.output = s.prompt; renderTerminal(); }
+};
+$('#btnCopy').onclick = () => {
+  navigator.clipboard?.writeText(terminalScreen.textContent);
+};
+$('#btnPaste').onclick = async () => {
+  const text = await navigator.clipboard?.readText();
+  if (text) terminalInput.value += text;
+};
+
+// ========== 新增连接 ==========
+function openAddModal() { $('#addBackdrop').classList.add('show'); }
+function closeAddModal() {
+  $('#addBackdrop').classList.remove('show');
+  ['fieldHost','fieldUser','fieldPass'].forEach(id => $(`#${id}`).classList.remove('invalid'));
+}
+
+function validateAdd() {
+  let ok = true;
+  ['fieldHost','fieldUser','fieldPass'].forEach(id => $(`#${id}`).classList.remove('invalid'));
+  if (!$('#fHost').value.trim()) { $('#fieldHost').classList.add('invalid'); ok = false; }
+  if (!$('#fUser').value.trim()) { $('#fieldUser').classList.add('invalid'); ok = false; }
+  if (!$('#fPass').value.trim()) { $('#fieldPass').classList.add('invalid'); ok = false; }
+  return ok;
+}
+
+$('#btnAddSave').onclick = () => {
+  if (!validateAdd()) return;
+  connections.push({
+    id: uid(),
+    name: $('#fName').value.trim(),
+    host: $('#fHost').value.trim(),
+    port: parseInt($('#fPort').value) || 22,
+    user: $('#fUser').value.trim(),
+    group: $('#fGroup').value.trim() || '未分组',
+    enabled: $('#fEnabled').checked,
+    deleted: false,
+  });
+  closeAddModal();
+  setMgrStatus('保存成功', 'success');
+  ['fName','fHost','fPass','fGroup'].forEach(id => $(`#${id}`).value = '');
+  $('#fPort').value = '22';
+  $('#fUser').value = 'root';
+  $('#fEnabled').checked = true;
+  renderMgrList();
+};
+
+// ========== 事件绑定 ==========
+$('#btnConnMgr').onclick = openMgr;
+$('#btnOpenMgrHint').onclick = openMgr;
+$('#btnMgrClose').onclick = closeMgr;
+$('#btnMgrMin').onclick = closeMgr;
+$('#mgrBackdrop').onclick = (e) => { if (e.target === $('#mgrBackdrop')) closeMgr(); };
+
+$('#btnAddConn').onclick = openAddModal;
+$('#btnAddFolder').onclick = () => setMgrStatus('新建文件夹（原型暂未实现）', '');
+$('#btnDelConn').onclick = toggleDelete;
+$('#btnRefresh').onclick = () => { setMgrStatus('刷新成功', 'success'); renderMgrList(); };
+$('#btnAddCancel').onclick = closeAddModal;
+$('#addBackdrop').onclick = (e) => { if (e.target === $('#addBackdrop')) closeAddModal(); };
+
+$('#searchInput').oninput = (e) => { searchText = e.target.value; renderMgrList(); };
+$('#groupFilter').onchange = (e) => { groupFilter = e.target.value; renderMgrList(); };
+$('#showDeleted').onchange = (e) => { includeDeleted = e.target.checked; renderMgrList(); };
+$('#closeAfterConnect').onchange = (e) => { closeAfterConnect = e.target.checked; };
+
+// 键盘：Enter 连接选中项
+document.addEventListener('keydown', (e) => {
+  if (!$('#mgrBackdrop').classList.contains('show')) return;
+  if (e.key === 'Enter' && selectedConnId) connectFromMgr(selectedConnId);
+  if (e.key === 'Escape') closeMgr();
+});
+
+// ========== 初始化 ==========
+renderAll();
+</script>
+</body>
+</html>

@@ -2,6 +2,7 @@ package gui // 本文件所在的包名，GUI 相关代码都在这个包里
 
 import (
 	"database/sql"
+	"fmt"
 	"image"
 	"image/color"
 	"sort"
@@ -68,6 +69,8 @@ type state struct { // 整个窗口的全局状态，保存所有控件和数据
 	showConnListDialog   bool
 	connListDialogOK     widget.Clickable
 	connListDialogCancel widget.Clickable
+
+	focusRequested bool // 请求在下一帧聚焦当前会话
 }
 
 type session struct { // 单个 SSH 会话（终端标签页）的状态
@@ -84,6 +87,7 @@ type session struct { // 单个 SSH 会话（终端标签页）的状态
 	menuCopyBtn     widget.Clickable
 	menuPasteBtn    widget.Clickable
 	contextMenuOpen bool
+	tag             *int
 }
 
 var guiLogger *logging.Logger
@@ -221,75 +225,19 @@ func listPage(gtx layout.Context, th *material.Theme, database *sql.DB, st *stat
 	inset := layout.UniformInset(unit.Dp(8)) // 页面四周 8dp 内边距
 	return inset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 		return layout.Flex{Axis: layout.Vertical}.Layout(gtx,
-			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { // 上半部分：连接列表，占用大部分空间
-				l := material.List(th, &st.connList) // 使用可滚动 List 展示所有连接
-				return l.Layout(gtx, len(st.items), func(gtx layout.Context, i int) layout.Dimensions {
-					it := st.items[i]                                       // 当前第 i 条连接
-					connect := &st.connectBtns[i]                           // “连接”按钮状态
-					remove := &st.removeBtns[i]                             // “删除/恢复”按钮状态
-					return layout.Flex{Axis: layout.Horizontal}.Layout(gtx, // 一条记录在一行里横向排布
-						layout.Rigid(material.Body1(th, it.Name).Layout), // 名称
-						layout.Rigid(spacer),
-						layout.Rigid(material.Body1(th, it.Host).Layout), // 主机
-						layout.Rigid(spacer),
-						layout.Rigid(material.Body1(th, strconv.Itoa(it.Port)).Layout), // 端口
-						layout.Rigid(spacer),
-						layout.Rigid(material.Body1(th, it.User).Layout), // 用户
-						layout.Rigid(spacer),
-						layout.Rigid(material.Body1(th, it.GroupName).Layout), // 分组
-						layout.Rigid(spacer),
-						layout.Rigid(material.Body1(th, strconv.Itoa(it.Enabled)).Layout), // 是否启用（0/1）
-						layout.Rigid(spacer),
-						layout.Rigid(material.Body1(th, strconv.FormatInt(it.CreatedAt, 10)).Layout), // 创建时间（时间戳）
-						layout.Rigid(spacer),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions { // “连接”按钮
-							btn := material.Button(th, connect, "连接")
-							if connect.Clicked(gtx) { // 点击后打开或激活对应 SSH 会话
-								openSession(th, st, it)
-							}
-							return btn.Layout(gtx)
-						}),
-						layout.Rigid(spacer),
-						layout.Rigid(func(gtx layout.Context) layout.Dimensions { // “删除/恢复”按钮
-							text := "删除"
-							if it.Deleted == 1 { // 已删除的显示为“恢复”
-								text = "恢复"
-							}
-							btn := material.Button(th, remove, text)
-							if remove.Clicked(gtx) {
-								d := 1
-								if it.Deleted == 1 { // 如果当前是已删除，则点击后恢复
-									d = 0
-								}
-								if err := db.SetDeleted(database, it.ID, d); err != nil { // 更新 Deleted 标记
-									st.lastMessage = err.Error()
-								} else {
-									loadList(database, st) // 更新成功后重新加载列表
-								}
-							}
-							return btn.Layout(gtx)
-						}),
-					)
-				})
-			}),
 			layout.Rigid(func(gtx layout.Context) layout.Dimensions { // 会话 Tab 区域
 				if len(st.sessions) == 0 {
 					return layout.Dimensions{}
 				}
 				return sessionTabsBar(gtx, th, st)
 			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { // 底部：终端区域
+			layout.Flexed(1, func(gtx layout.Context) layout.Dimensions { // 底部：终端区域
 				if len(st.sessions) == 0 { // 没有打开任何会话则不显示
-					return layout.Dimensions{}
+					return layout.Center.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
+						return material.Body1(th, "请点击上方 [连接列表] 打开会话").Layout(gtx)
+					})
 				}
 				return sessionsArea(gtx, th, st)
-			}),
-			layout.Rigid(func(gtx layout.Context) layout.Dimensions { // 底部：刷新按钮
-				btn := material.Button(th, &st.refreshBtn, "刷新")
-				if st.refreshBtn.Clicked(gtx) {
-					loadList(database, st) // 手动重新加载列表
-				}
-				return btn.Layout(gtx)
 			}),
 		)
 	})
@@ -540,10 +488,11 @@ func openSession(th *material.Theme, st *state, c db.Connection) { // 打开或�
 			break   // 退出循环
 		}
 	}
-	if idx == -1 { // 如果没找到，说明是新会话
-		st.sessions = append(st.sessions, session{ // 在 sessions 切片末尾追加一个 session
-			conn:  c,                                               // 保存连接配置
-			title: strconv.Itoa(len(st.sessions)+1) + " " + c.Host, // 标题 = 序号+主机
+	if idx == -1 {
+		st.sessions = append(st.sessions, session{
+			conn:  c,
+			title: strconv.Itoa(len(st.sessions)+1) + " " + c.Host,
+			tag:   new(int),
 		})
 		st.sessionTabs = append(st.sessionTabs, widget.Clickable{}) // 为新会话增加一个 Tab 点击状态
 		idx = len(st.sessions) - 1                                  // 新增会话的索引是最后一个元素
@@ -574,6 +523,7 @@ func openSession(th *material.Theme, st *state, c db.Connection) { // 打开或�
 		}
 	}
 	st.activeSession = idx // 把当前激活会话设为本会话
+	st.focusRequested = true
 }
 
 func startTerminalReader(s *session) { // 后台读取远端终端输出，更新到 s.log
@@ -635,17 +585,48 @@ func sessionTabsBar(gtx layout.Context, th *material.Theme, st *state) layout.Di
 				children = append(children, layout.Rigid(func(gtx layout.Context) layout.Dimensions {
 					btn := &st.sessionTabs[i]
 					label := st.sessions[i].title
-					return material.Clickable(gtx, btn, func(gtx layout.Context) layout.Dimensions {
-						if btn.Clicked(gtx) {
+
+					if btn.Clicked(gtx) {
+						// oldActive := st.activeSession
+						if st.sessions[i].term == nil {
+							openSession(th, st, st.sessions[i].conn)
+						} else {
 							st.activeSession = i
 						}
+						if st.activeSession >= 0 && st.activeSession < len(st.sessions) {
+							// 标记需要聚焦，推迟到 sessionsArea 中执行，确保 tag 已注册
+							st.focusRequested = true
+							// 恢复 tag 稳定性，不再每次 new
+							// st.sessions[st.activeSession].tag = new(int)
+						}
+						if invalidateWindow != nil {
+							invalidateWindow()
+						}
+					}
+
+					return material.Clickable(gtx, btn, func(gtx layout.Context) layout.Dimensions {
 						pad := layout.UniformInset(unit.Dp(4))
 						return pad.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
-							lbl := material.Body1(th, label)
-							if st.activeSession == i {
-								lbl.Font.Weight = 600
-							}
-							return lbl.Layout(gtx)
+							return layout.Flex{Axis: layout.Horizontal}.Layout(gtx,
+								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+									dot := material.Body1(th, "●")
+									if st.sessions[i].term != nil {
+										dot.Color = color.NRGBA{R: 0x00, G: 0xc8, B: 0x00, A: 0xff}
+									} else {
+										dot.Color = color.NRGBA{R: 0xaa, G: 0xaa, B: 0xaa, A: 0xff}
+									}
+									return dot.Layout(gtx)
+								}),
+								layout.Rigid(spacer),
+								layout.Rigid(func(gtx layout.Context) layout.Dimensions {
+									lbl := material.Body1(th, label)
+									if st.activeSession == i {
+										lbl.Font.Weight = 600
+										lbl.Color = th.Palette.ContrastBg
+									}
+									return lbl.Layout(gtx)
+								}),
+							)
 						})
 					})
 				}))
@@ -666,33 +647,52 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 			return layout.Dimensions{}
 		}
 		s := &st.sessions[st.activeSession]
+		if s.tag == nil {
+			s.tag = new(int)
+		}
+		tag := s.tag
 		outInset := layout.UniformInset(unit.Dp(4))
 		return outInset.Layout(gtx, func(gtx layout.Context) layout.Dimensions {
 			area := clip.Rect{Max: gtx.Constraints.Max}.Push(gtx.Ops)
-			event.Op(gtx.Ops, s)
+			event.Op(gtx.Ops, tag)
 			area.Pop()
 
-			gtx.Execute(key.FocusCmd{Tag: s})
+			// 如果收到聚焦请求（来自 Tab 切换），或者是新打开的会话（term!=nil 但 tag 刚初始化），执行聚焦
+			// 注意：FocusCmd 必须在 event.Op 之后执行
+			if st.focusRequested {
+				if guiLogger != nil {
+					guiLogger.Info("DEBUG: Executing Deferred FocusCmd for Session %d, Tag %p", st.activeSession, tag)
+				}
+				fmt.Printf("FOCUS: Executing Deferred FocusCmd for Session %d. Tag: %p\n", st.activeSession, tag)
+				gtx.Execute(key.FocusCmd{Tag: tag})
+				st.focusRequested = false
+			}
+
+			// fmt.Printf("RENDER: Session %d. Tag: %p. Term: %p\n", st.activeSession, tag, s.term)
 
 			for {
 				ev, ok := gtx.Event(
-					key.FocusFilter{Target: s},
-					pointer.Filter{Target: s, Kinds: pointer.Press},
-					key.Filter{Focus: s, Name: key.NameReturn},
-					key.Filter{Focus: s, Name: key.NameEnter},
-					key.Filter{Focus: s, Name: key.NameTab},
-					key.Filter{Focus: s, Name: key.NameDeleteBackward},
-					key.Filter{Focus: s, Name: key.NameDeleteForward},
-					key.Filter{Focus: s, Name: "C", Required: key.ModShortcut | key.ModShift},
-					key.Filter{Focus: s, Name: "V", Required: key.ModShortcut | key.ModShift},
-					key.Filter{Focus: s},
-					pointer.Filter{Target: s},
+					key.FocusFilter{Target: tag},
+					pointer.Filter{Target: tag, Kinds: pointer.Press},
+					key.Filter{Focus: tag, Name: key.NameReturn},
+					key.Filter{Focus: tag, Name: key.NameEnter},
+					key.Filter{Focus: tag, Name: key.NameTab},
+					key.Filter{Focus: tag, Name: key.NameDeleteBackward},
+					key.Filter{Focus: tag, Name: key.NameDeleteForward},
+					key.Filter{Focus: tag, Name: "C", Required: key.ModShortcut | key.ModShift},
+					key.Filter{Focus: tag, Name: "V", Required: key.ModShortcut | key.ModShift},
+					key.Filter{Focus: tag},
+					pointer.Filter{Target: tag},
 				)
 				if !ok {
 					break
 				}
 				switch e := ev.(type) {
 				case key.Event:
+					if guiLogger != nil {
+						guiLogger.Info("DEBUG: Session %d Key Event: Name=%s State=%v Tag=%p", st.activeSession, e.Name, e.State, tag)
+					}
+					fmt.Printf("KEY: Session %d. Name: %s. State: %v. Tag: %p\n", st.activeSession, e.Name, e.State, tag)
 					if e.State != key.Press {
 						continue
 					}
@@ -800,8 +800,10 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 					}
 
 					if data != "" {
+						fmt.Printf("WRITE: Session %d. Writing %q to Stdin %p\n", st.activeSession, data, s.term.Stdin)
 						_, err := s.term.Stdin.Write([]byte(data))
 						if err != nil {
+							fmt.Printf("WRITE ERROR: Session %d. Error: %v\n", st.activeSession, err)
 							s.log += "\n错误:\n" + err.Error()
 							if invalidateWindow != nil {
 								invalidateWindow()
@@ -811,12 +813,14 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 					}
 				case key.EditEvent:
 					if s.term == nil || s.term.Stdin == nil {
+						fmt.Printf("EDIT: Session %d. Stdin is nil\n", st.activeSession)
 						continue
 					}
 					if e.Text != "" {
-
+						fmt.Printf("EDIT: Session %d. Writing %q to Stdin %p\n", st.activeSession, e.Text, s.term.Stdin)
 						_, err := s.term.Stdin.Write([]byte(e.Text))
 						if err != nil {
+							fmt.Printf("EDIT ERROR: Session %d. Error: %v\n", st.activeSession, err)
 							s.log += "\n错误:\n" + err.Error()
 							if invalidateWindow != nil {
 								invalidateWindow()
@@ -849,6 +853,11 @@ func sessionsArea(gtx layout.Context, th *material.Theme, st *state) layout.Dime
 					}
 				case pointer.Event:
 					if e.Kind == pointer.Press {
+						if guiLogger != nil {
+							guiLogger.Info("DEBUG: Pointer Clicked Session %d, Tag %p", st.activeSession, tag)
+						}
+						fmt.Printf("CLICK: Session %d. Tag: %p\n", st.activeSession, tag)
+						gtx.Execute(key.FocusCmd{Tag: tag})
 						if e.Buttons == pointer.ButtonSecondary {
 							s.contextMenuOpen = true
 						} else {
