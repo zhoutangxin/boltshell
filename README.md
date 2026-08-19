@@ -2,7 +2,7 @@
 
 轻量 FinalShell 风格 SSH 桌面客户端：**Go + Wails**，上终端 + 下 SFTP + 系统监控 + 文件传输。
 
-> 仓库模块名仍为 `ssh-go`；打包产物为 **ShellLite.exe**。
+> 仓库模块名仍为 `shelllite`；打包产物为 **ShellLite.exe**。
 
 ## Logo
 
@@ -24,7 +24,7 @@
 ```
 .
 ├─ cmd/
-│  └─ ssh-go/
+│  └─ shelllite/
 │     └─ main.go           # 程序入口与参数解析
 ├─ internal/
 │  ├─ config/
@@ -42,19 +42,19 @@
 2) 构建
 
 ```bash
-go build ./cmd/ssh-go
+go build ./cmd/shelllite
 ```
 
 3) 运行（SSH 连接）
 
 ```bash
-go run ./cmd/ssh-go -host 192.168.1.10 -user root -pass 123456 -port 22
+go run ./cmd/shelllite -host 192.168.1.10 -user root -pass 123456 -port 22
 # 指定命令（可选）
-go run ./cmd/ssh-go -host 192.168.1.10 -user root -pass 123456 -cmd "uname -a"
+go run ./cmd/shelllite -host 192.168.1.10 -user root -pass 123456 -cmd "uname -a"
 # 交互式 Shell（默认开启）
-go run ./cmd/ssh-go -host 192.168.1.10 -user root -pass 123456
+go run ./cmd/shelllite -host 192.168.1.10 -user root -pass 123456
 # 只执行命令，不进入交互式
-go run ./cmd/ssh-go -host 192.168.1.10 -user root -pass 123456 -shell=false -cmd "ls -la"
+go run ./cmd/shelllite -host 192.168.1.10 -user root -pass 123456 -shell=false -cmd "ls -la"
 ```
 
 默认读取当前目录的 config.json；也可通过环境变量或命令行覆盖
@@ -63,10 +63,10 @@ go run ./cmd/ssh-go -host 192.168.1.10 -user root -pass 123456 -shell=false -cmd
 # 环境变量方式（无需配置文件）
 # Windows PowerShell
 $env:SSH_HOST="192.168.1.10"; $env:SSH_USER="root"; $env:SSH_PASS="123456"; $env:SSH_PORT="22"
-go run ./cmd/ssh-go
+go run ./cmd/shelllite
 
 # 指定其他配置文件路径
-go run ./cmd/ssh-go -config ./config.json
+go run ./cmd/shelllite -config ./config.json
 ```
 
 4) 运行测试
@@ -80,7 +80,7 @@ go test ./...
 
 ```json
 {
-  "appName": "ssh-go",
+  "appName": "ShellLite",
   "logLevel": "INFO",
   "port": 22,
   "host": "192.168.1.10",
@@ -89,7 +89,7 @@ go test ./...
 }
 ```
 
-- `appName`：应用名称，缺省时为 `ssh-go`
+- `appName`：应用名称，缺省时为 `ShellLite`
 - `logLevel`：日志等级，支持 `DEBUG/INFO/WARN/ERROR`
 - `port`：SSH 端口，默认 22
 - `host`/`user`/`password`：连接所需的目标、账号与密码
@@ -105,7 +105,7 @@ go test ./...
 - 启动 Web 页面并使用 SQLite 存储：
 
 ```bash
-go run ./cmd/ssh-go -http 127.0.0.1:8080
+go run ./cmd/shelllite -http 127.0.0.1:8080
 # 数据库路径可选：环境变量 DB_PATH 或配置中的 dbPath，默认 exe 同目录 data.db
 ```
 
@@ -115,20 +115,20 @@ go run ./cmd/ssh-go -http 127.0.0.1:8080
 
 - 打包后使用：
   - 将 config.json 和可选 data.db 放在 exe 同目录
-  - 运行：ssh-go.exe -http 127.0.0.1:8080
+  - 运行：ShellLite.exe -http 127.0.0.1:8080
 
 ## 打包为 exe
 在 Windows 下：
 
 ```powershell
-go build -trimpath -ldflags "-s -w" -o dist/ssh-go.exe ./cmd/ssh-go
+go build -trimpath -ldflags "-s -w" -o dist/ShellLite.exe ./cmd/shelllite
 # 将 config.json 放到 dist 与 exe 同目录，双击即可按配置连接
 ```
 
 跨平台（在任意平台交叉编译 Windows）：
 
 ```bash
-GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o dist/ssh-go.exe ./cmd/ssh-go
+GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o dist/ShellLite.exe ./cmd/shelllite
 # 运行时会优先读取 exe 所在目录的 config.json，其次读取当前工作目录
 ```
 
@@ -139,13 +139,13 @@ GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o dist/ssh-go.exe
 日志统一以等级前缀输出，例如：
 
 ```
-[INFO] ssh-go 启动
-[INFO] 配置: app=ssh-go level=INFO port=0
+[INFO] ShellLite 启动
+[INFO] 配置: app=ShellLite level=INFO port=0
 ```
 
 ## 约定
-- 模块名：`ssh-go`
-- 布局：命令行入口置于 `cmd/ssh-go/`，业务封装放入 `internal/`
+- 模块名：`shelllite`
+- 布局：命令行入口置于 `cmd/shelllite/`，业务封装放入 `internal/`
 - 配置默认值：未指定配置文件或字段缺省时，使用安全默认值
 - 仓库忽略：`config.json` 默认被忽略，避免提交环境私密信息
 

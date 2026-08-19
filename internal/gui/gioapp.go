@@ -23,9 +23,9 @@ import (
 	"gioui.org/widget"
 	"gioui.org/widget/material"
 	"golang.org/x/text/encoding/simplifiedchinese"
-	"ssh-go/internal/db"
-	"ssh-go/internal/logging"
-	"ssh-go/internal/sshclient"
+	"shelllite/internal/db"
+	"shelllite/internal/logging"
+	"shelllite/internal/sshclient"
 
 	"github.com/atotto/clipboard"
 )

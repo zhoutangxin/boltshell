@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"ssh-go/internal/sshclient"
+	"shelllite/internal/sshclient"
 )
 
 // SysProcInfo 进程占用摘要

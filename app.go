@@ -12,11 +12,11 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/text/encoding/simplifiedchinese"
-	"ssh-go/internal/config"
-	"ssh-go/internal/db"
-	"ssh-go/internal/logging"
-	"ssh-go/internal/sftpclient"
-	"ssh-go/internal/sshclient"
+	"shelllite/internal/config"
+	"shelllite/internal/db"
+	"shelllite/internal/logging"
+	"shelllite/internal/sftpclient"
+	"shelllite/internal/sshclient"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -92,7 +92,7 @@ func (a *App) initBackend() error {
 }
 
 func firstNonEmptyFromConfigEnv(cfg config.Config) string {
-	// 兼容你 cmd/ssh-go/main.go 的逻辑：环境变量优先其次 config
+	// 兼容你 cmd/shelllite/main.go 的逻辑：环境变量优先其次 config
 	if v := os.Getenv("DB_PATH"); v != "" {
 		return v
 	}

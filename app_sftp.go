@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"ssh-go/internal/sftpclient"
+	"shelllite/internal/sftpclient"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )

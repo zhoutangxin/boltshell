@@ -6,11 +6,11 @@ import (
 	"os"            // 标准库：环境变量、标准输入输出、退出码等
 	"path/filepath" // 标准库：路径拼接与解析
 
-	"ssh-go/internal/config"    // 本项目：配置加载（JSON）
-	"ssh-go/internal/db"        // 本项目：SQLite 数据库操作
-	"ssh-go/internal/gui"       // 本项目：图形界面（Gio）
-	"ssh-go/internal/logging"   // 本项目：简单日志封装
-	"ssh-go/internal/sshclient" // 本项目：SSH 连接和命令执行
+	"shelllite/internal/config"    // 本项目：配置加载（JSON）
+	"shelllite/internal/db"        // 本项目：SQLite 数据库操作
+	"shelllite/internal/gui"       // 本项目：图形界面（Gio）
+	"shelllite/internal/logging"   // 本项目：简单日志封装
+	"shelllite/internal/sshclient" // 本项目：SSH 连接和命令执行
 )
 
 func main() { // 主函数：根据参数决定启动 GUI 还是直接 SSH
@@ -63,7 +63,7 @@ func main() { // 主函数：根据参数决定启动 GUI 还是直接 SSH
 	}
 
 	logger := logging.New(os.Stdout, level)                                         // 创建日志记录器，输出到标准输出
-	logger.Info("ssh-go 启动")                                                        // 打一条启动日志
+	logger.Info("ShellLite 启动")                                                     // 打一条启动日志
 	logger.Info("配置: app=%s level=%s port=%d", cfg.AppName, cfg.LogLevel, cfg.Port) // 打当前配置概要
 
 	// 打开数据库（连接信息存这里）

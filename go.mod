@@ -1,4 +1,4 @@
-module ssh-go
+module shelllite
 
 go 1.25.0
 

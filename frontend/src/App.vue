@@ -100,7 +100,7 @@ type TransferTask = {
   updatedAt: number
 }
 
-const DOWNLOAD_DIR_KEY = 'ssh-go-download-dir'
+const DOWNLOAD_DIR_KEY = 'shelllite-download-dir'
 const downloadDir = ref(localStorage.getItem(DOWNLOAD_DIR_KEY) || '')
 const transferTasks = reactive<TransferTask[]>([])
 const transferPanelOpen = ref(false)
@@ -167,7 +167,7 @@ async function pickDownloadDir() {
     const dir = await PickDownloadDir()
     if (dir) saveDownloadDir(dir)
   } catch (e) {
-    console.error('[ssh-go] PickDownloadDir failed', e)
+    console.error('[ShellLite] PickDownloadDir failed', e)
   }
 }
 
@@ -179,7 +179,7 @@ async function openDownloadDir() {
   try {
     await OpenLocalFolder(downloadDir.value)
   } catch (e) {
-    console.error('[ssh-go] OpenLocalFolder failed', e)
+    console.error('[ShellLite] OpenLocalFolder failed', e)
   }
 }
 
@@ -224,8 +224,8 @@ const state = reactive({
   newGroupName: '',
 })
 
-const RECENT_KEY = 'ssh-go-quick-connect'
-const EMPTY_GROUPS_KEY = 'ssh-go-empty-groups'
+const RECENT_KEY = 'shelllite-quick-connect'
+const EMPTY_GROUPS_KEY = 'shelllite-empty-groups'
 const recentIDs = ref<string[]>([])
 const emptyGroups = ref<string[]>([])
 const selectedQuickID = ref('')
@@ -364,7 +364,7 @@ async function refreshSysInfo(sessionID?: string) {
       Processes: Array.isArray(res.Processes) ? res.Processes : [],
     }
   } catch (e) {
-    console.error('[ssh-go] GetSessionSysInfo failed', e)
+    console.error('[ShellLite] GetSessionSysInfo failed', e)
   } finally {
     sysInfoLoading.value = false
   }
@@ -941,7 +941,7 @@ async function refreshList() {
     state.allConnections = Array.isArray(res) ? res : []
     seedRecentsIfEmpty()
   } catch (e) {
-    console.error('[ssh-go] ListConnections failed', e)
+    console.error('[ShellLite] ListConnections failed', e)
     state.allConnections = []
     setMgrMessage('获取连接列表失败', 'error')
   }
@@ -996,7 +996,7 @@ async function onConnect(conn: Connection) {
     if (state.closeAfterConnect) closeMgr()
   } catch (e) {
     setMgrMessage(`连接失败: ${errText(e)}`, 'error')
-    console.error('[ssh-go] onConnect failed', e)
+    console.error('[ShellLite] onConnect failed', e)
   }
 }
 
@@ -1061,7 +1061,7 @@ async function onCloseTab(sessionID: string) {
   try {
     await CloseSession(sessionID)
   } catch (e) {
-    console.error('[ssh-go] CloseSession failed', e)
+    console.error('[ShellLite] CloseSession failed', e)
   }
   const entry = termMap.get(sessionID)
   if (entry) {
@@ -1134,13 +1134,13 @@ function markSessionClosed(sessionID: string) {
 onMounted(async () => {
   EventsOn('terminal-output', (...args: unknown[]) => {
     const [sessionID, data] = parseEventArgs(args)
-    console.debug('[ssh-go] terminal-output', sessionID, data?.length)
+    console.debug('[ShellLite] terminal-output', sessionID, data?.length)
     if (sessionID) writeToTerminal(sessionID, data)
   })
 
   EventsOn('terminal-closed', (...args: unknown[]) => {
     const [sessionID] = parseEventArgs(args)
-    console.debug('[ssh-go] terminal-closed', sessionID)
+    console.debug('[ShellLite] terminal-closed', sessionID)
     if (sessionID) markSessionClosed(sessionID)
   })
 

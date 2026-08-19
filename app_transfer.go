@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"strings"
 
-	"ssh-go/internal/db"
+	"shelllite/internal/db"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
