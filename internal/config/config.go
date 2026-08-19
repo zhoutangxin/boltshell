@@ -19,7 +19,7 @@ type Config struct {
 // Default 返回一份默认配置，用于没有配置文件或配置不完整的情况
 func Default() Config {
 	return Config{
-		AppName:  "ssh-go", // 默认应用名
+		AppName:  "ShellLite", // 默认应用名
 		LogLevel: "INFO",   // 默认日志级别 INFO
 		Port:     0,        // 端口 0 表示“未配置”，后续会用默认 22 或环境变量覆盖
 		Host:     "",       // 默认不指定主机
@@ -41,7 +41,7 @@ func Load(path string) (Config, error) {
 	}
 	// 一些字段如果为空，则使用合理的默认值
 	if c.AppName == "" {
-		c.AppName = "ssh-go"
+		c.AppName = "ShellLite"
 	}
 	if c.LogLevel == "" {
 		c.LogLevel = "INFO"

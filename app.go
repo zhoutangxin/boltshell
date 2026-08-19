@@ -87,7 +87,7 @@ func (a *App) initBackend() error {
 		level = logging.Error
 	}
 	a.logger = logging.New(os.Stdout, level)
-	a.logger.Info("ssh-go (wails) backend init ok")
+	a.logger.Info("ShellLite (wails) backend init ok")
 	return nil
 }
 

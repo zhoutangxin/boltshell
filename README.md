@@ -1,6 +1,18 @@
-# ssh-go
+# ShellLite（壳轻）
 
-一个基础的 Go 项目骨架，包含命令行入口、JSON 配置加载与简单日志封装，方便后续扩展（如 SSH 相关功能）。
+轻量 FinalShell 风格 SSH 桌面客户端：**Go + Wails**，上终端 + 下 SFTP + 系统监控 + 文件传输。
+
+> 仓库模块名仍为 `ssh-go`；打包产物为 **ShellLite.exe**。
+
+## Logo
+
+应用图标：`build/appicon.png`（设计稿另存于 `docs/shelllite-logo.png`）
+
+- 深蓝渐变底 — 终端/科技感  
+- 薄荷绿 `>_` — SSH 命令行  
+- 右上角光点 — 「Lite」轻量寓意  
+
+重新打包后 exe 会使用新图标：`wails build`
 
 ## 特性
 - 标准布局：`cmd/` + `internal/`

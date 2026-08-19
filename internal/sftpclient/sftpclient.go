@@ -177,6 +177,36 @@ func copyWithProgress(dst io.Writer, src io.Reader, total int64, onProgress Prog
 	return err
 }
 
+func wrapTransferErr(action, remotePath string, err error) error {
+	if err == nil {
+		return nil
+	}
+	p := cleanRemotePath(remotePath)
+	msg := err.Error()
+	hint := ""
+	if strings.Contains(msg, "FX_FAILURE") || strings.Contains(msg, "Failure") {
+		hint = "（常见原因：磁盘已满、目录只读、无写入权限，请换目录或执行 df -h 检查）"
+	}
+	return fmt.Errorf("%s %s 失败%s: %w", action, p, hint, err)
+}
+
+func (c *Client) openRemoteForWrite(remotePath string) (*sftp.File, error) {
+	p := cleanRemotePath(remotePath)
+	parent := path.Dir(p)
+	if parent != p && parent != "." {
+		if info, err := c.client.Stat(parent); err != nil {
+			return nil, fmt.Errorf("目标目录不存在: %s", parent)
+		} else if !info.IsDir() {
+			return nil, fmt.Errorf("目标路径不是目录: %s", parent)
+		}
+	}
+	f, err := c.client.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
 func (c *Client) Upload(localPath, remotePath string, onProgress ProgressFunc) error {
 	if c == nil || c.client == nil {
 		return fmt.Errorf("sftp not ready")
@@ -194,12 +224,15 @@ func (c *Client) Upload(localPath, remotePath string, onProgress ProgressFunc) e
 	}
 	defer src.Close()
 	total := info.Size()
-	dst, err := c.client.Create(cleanRemotePath(remotePath))
+	dst, err := c.openRemoteForWrite(remotePath)
 	if err != nil {
-		return err
+		return wrapTransferErr("上传", remotePath, err)
 	}
 	defer dst.Close()
-	return copyWithProgress(dst, src, total, onProgress)
+	if err := copyWithProgress(dst, src, total, onProgress); err != nil {
+		return wrapTransferErr("上传", remotePath, err)
+	}
+	return nil
 }
 
 func localDirTotalSize(localPath string) (int64, error) {
@@ -286,13 +319,16 @@ func (c *Client) uploadFileTracked(localPath, remotePath string, dt *dirTransfer
 		return err
 	}
 	defer src.Close()
-	dst, err := c.client.Create(cleanRemotePath(remotePath))
+	dst, err := c.openRemoteForWrite(remotePath)
 	if err != nil {
-		return err
+		return wrapTransferErr("上传", remotePath, err)
 	}
 	defer dst.Close()
 	_, err = io.Copy(dst, &countingReader{r: src, dt: dt})
-	return err
+	if err != nil {
+		return wrapTransferErr("上传", remotePath, err)
+	}
+	return nil
 }
 
 func (c *Client) Download(remotePath, localPath string, onProgress ProgressFunc) error {

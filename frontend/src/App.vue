@@ -508,18 +508,6 @@ function formatModTime(ts: number) {
   return `${d.getFullYear()}/${p(d.getMonth() + 1)}/${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
 }
 
-function pathCrumbs(p: string) {
-  if (!p || p === '/') return [{ label: '/', path: '/' }]
-  const parts = p.split('/').filter(Boolean)
-  const crumbs = [{ label: '/', path: '/' }]
-  let acc = ''
-  for (const part of parts) {
-    acc += `/${part}`
-    crumbs.push({ label: part, path: acc })
-  }
-  return crumbs
-}
-
 const fileTreePaths = computed(() => {
   const st = activeFileState.value
   if (!st) return ['/']
@@ -1383,11 +1371,8 @@ watch(activeSessionID, () => {
               <button class="ft-btn" type="button" :disabled="!activeFileState.selected" @click="remoteRename">✏ 重命名</button>
               <span class="ft-sep" />
               <span class="ft-tag">SFTP</span>
-              <div class="path-bar">
-                <template v-for="(c, i) in pathCrumbs(activeFileState.path)" :key="c.path">
-                  <span v-if="i > 0" class="path-sep">/</span>
-                  <span class="path-crumb" @click="navigateRemote(c.path)">{{ c.label === '/' ? '/' : c.label }}</span>
-                </template>
+              <div class="path-bar" :title="activeFileState.path || '/'">
+                <span class="path-display">{{ activeFileState.path || '/' }}</span>
               </div>
             </div>
             <div class="file-body">
@@ -2307,6 +2292,12 @@ df -h</textarea>
   font-family: var(--font-mono);
   overflow: hidden;
   min-width: 0;
+}
+.path-display {
+  color: var(--ui-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .path-crumb {
   color: var(--ui-accent);
