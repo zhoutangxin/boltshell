@@ -1,0 +1,1042 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ssh-go FinalShell 风格 · 终端 + FTP 原型</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      background: #eceff4;
+      color: #1e293b;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ===== 设计说明条（原型专用，正式版可删） ===== */
+    .proto-banner {
+      background: #fef3c7;
+      border-bottom: 1px solid #fcd34d;
+      padding: 6px 12px;
+      font-size: 12px;
+      color: #92400e;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .proto-banner strong { color: #78350f; }
+    .proto-banner button {
+      margin-left: auto;
+      border: 1px solid #d97706;
+      background: #fff;
+      color: #92400e;
+      padding: 2px 10px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 11px;
+    }
+
+    /* ===== 窗口标题栏模拟 ===== */
+    .win-title {
+      height: 32px;
+      background: linear-gradient(180deg, #f8fafc, #e2e8f0);
+      border-bottom: 1px solid #cbd5e1;
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      font-size: 12px;
+      color: #475569;
+      flex-shrink: 0;
+    }
+    .win-title .logo { font-weight: 600; color: #0f172a; margin-right: 8px; }
+
+    /* ===== 主体三栏 ===== */
+    .workspace {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+    }
+
+    /* 左侧系统信息（FinalShell 左栏，可折叠） */
+    .sys-panel {
+      width: 220px;
+      background: #f5f7fa;
+      border-right: 1px solid #cbd5e1;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      transition: width 0.2s, margin 0.2s;
+      overflow: hidden;
+    }
+    .sys-panel.collapsed { width: 0; border: none; }
+    .sys-head {
+      height: 28px;
+      background: #e8eef5;
+      border-bottom: 1px solid #d0d8e4;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      font-size: 11px;
+      color: #64748b;
+      font-weight: 600;
+    }
+    .sys-body { flex: 1; overflow: auto; padding: 8px; font-size: 11px; }
+    .metric { margin-bottom: 10px; }
+    .metric-label { color: #64748b; margin-bottom: 3px; display: flex; justify-content: space-between; }
+    .bar { height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 3px; }
+    .bar-fill.cpu { width: 12%; background: #22c55e; }
+    .bar-fill.mem { width: 45%; background: #3b82f6; }
+    .bar-fill.swap { width: 0%; background: #94a3b8; }
+    .proc-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 10px; }
+    .proc-table th { text-align: left; color: #94a3b8; font-weight: 500; padding: 2px 0; }
+    .proc-table td { padding: 2px 0; color: #334155; }
+    .disk-item { margin-top: 6px; }
+    .disk-item .path { color: #475569; }
+    .disk-item .size { color: #94a3b8; font-size: 10px; }
+
+    /* 中间主区 */
+    .main-col {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: #0b1220;
+    }
+
+    /* Tab 栏 */
+    .tab-bar {
+      height: 34px;
+      background: #e8eef5;
+      border-bottom: 1px solid #c5d0de;
+      display: flex;
+      align-items: flex-end;
+      flex-shrink: 0;
+    }
+    .rail-btn {
+      width: 36px;
+      height: 34px;
+      border: none;
+      background: transparent;
+      cursor: pointer;
+      font-size: 16px;
+      color: #475569;
+      flex-shrink: 0;
+    }
+    .rail-btn:hover { background: #d4dde8; }
+    .rail-btn.active { background: #c5d5e8; }
+    .tabs { display: flex; align-items: flex-end; gap: 2px; flex: 1; overflow-x: auto; padding-top: 3px; }
+    .tab {
+      background: #d8e3f0;
+      border: 1px solid #b8c8d8;
+      border-bottom: none;
+      color: #334155;
+      padding: 4px 12px;
+      border-radius: 6px 6px 0 0;
+      cursor: pointer;
+      font-size: 12px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 28px;
+      white-space: nowrap;
+    }
+    .tab.active { background: #0b1220; color: #e5e7eb; border-color: #0b1220; }
+    .tab .dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; }
+    .tab .close { opacity: 0.5; font-size: 12px; }
+    .tab .close:hover { opacity: 1; color: #ef4444; }
+    .tab-actions { display: flex; padding-right: 6px; gap: 2px; }
+    .tab-actions button {
+      width: 26px; height: 26px; border: none; background: transparent;
+      cursor: pointer; color: #64748b; border-radius: 4px; font-size: 13px;
+    }
+    .tab-actions button:hover { background: #d4dde8; }
+
+    /* 上下分割：终端 + 文件 */
+    .split-wrap { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .terminal-pane {
+      flex: 1;
+      min-height: 120px;
+      display: flex;
+      flex-direction: column;
+      background: #0b1220;
+    }
+    .terminal-screen {
+      flex: 1;
+      overflow: auto;
+      padding: 8px 12px;
+      font-family: "Cascadia Code", Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.55;
+      color: #e5e7eb;
+      white-space: pre-wrap;
+    }
+    .terminal-input-row {
+      display: flex;
+      border-top: 1px solid #1d2a45;
+      background: #0e1930;
+      flex-shrink: 0;
+    }
+    .terminal-prompt { padding: 8px 0 8px 12px; color: #4ade80; font-family: monospace; font-size: 13px; }
+    .terminal-input {
+      flex: 1; background: transparent; border: none; color: #e5e7eb;
+      font-family: monospace; font-size: 13px; padding: 8px 12px 8px 0; outline: none;
+    }
+    .terminal-hint {
+      font-size: 10px; color: #64748b; padding: 4px 12px 6px;
+      background: #0e1930; border-top: 1px solid #1d2a45;
+    }
+
+    /* 拖拽分割条 */
+    .splitter {
+      height: 6px;
+      background: #1e293b;
+      cursor: row-resize;
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-top: 1px solid #334155;
+      border-bottom: 1px solid #334155;
+    }
+    .splitter::after {
+      content: "";
+      width: 40px; height: 2px;
+      background: #64748b; border-radius: 1px;
+    }
+    .splitter:hover { background: #2563eb33; }
+
+    /* ===== 底部文件面板（FTP/SFTP） ===== */
+    .file-pane {
+      height: 240px;
+      min-height: 100px;
+      max-height: 70vh;
+      background: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      border-top: 2px solid #334155;
+    }
+    .file-pane.collapsed { height: 32px !important; min-height: 32px; overflow: hidden; }
+
+    .file-tabs {
+      height: 32px;
+      background: #eef2f7;
+      border-bottom: 1px solid #d0d8e4;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .file-tab {
+      padding: 4px 14px;
+      font-size: 12px;
+      color: #64748b;
+      cursor: pointer;
+      border-radius: 4px 4px 0 0;
+      border: 1px solid transparent;
+    }
+    .file-tab.active {
+      background: #fff;
+      color: #0f172a;
+      border-color: #d0d8e4;
+      border-bottom-color: #fff;
+      font-weight: 600;
+    }
+    .file-tab-spacer { flex: 1; }
+    .file-tab-tools button {
+      border: none; background: transparent; cursor: pointer;
+      color: #64748b; font-size: 14px; padding: 2px 6px; border-radius: 4px;
+    }
+    .file-tab-tools button:hover { background: #e2e8f0; color: #0f172a; }
+
+    .file-toolbar {
+      height: 36px;
+      background: #fff;
+      border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .ft-btn {
+      height: 26px;
+      padding: 0 8px;
+      border: 1px solid #dbe3ee;
+      background: #fff;
+      border-radius: 4px;
+      font-size: 11px;
+      color: #475569;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .ft-btn:hover { background: #f1f5f9; border-color: #94a3b8; }
+    .ft-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .ft-btn.primary { background: #2563eb; border-color: #2563eb; color: #fff; }
+    .ft-btn.primary:hover { background: #1d4ed8; }
+    .ft-sep { width: 1px; height: 18px; background: #e2e8f0; margin: 0 4px; }
+    .path-bar {
+      flex: 1;
+      margin-left: 8px;
+      height: 26px;
+      border: 1px solid #dbe3ee;
+      border-radius: 4px;
+      background: #f8fafc;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      font-size: 12px;
+      color: #334155;
+      overflow: hidden;
+    }
+    .path-bar .crumb { cursor: pointer; color: #2563eb; }
+    .path-bar .crumb:hover { text-decoration: underline; }
+    .path-bar .sep { color: #94a3b8; margin: 0 4px; }
+
+    .file-body {
+      flex: 1;
+      display: flex;
+      min-height: 0;
+      background: #fff;
+    }
+    .dir-tree {
+      width: 180px;
+      border-right: 1px solid #e2e8f0;
+      overflow: auto;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    .tree-node {
+      padding: 4px 8px 4px 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      color: #334155;
+      user-select: none;
+    }
+    .tree-node:hover { background: #f0f6ff; }
+    .tree-node.active { background: #dbeafe; color: #1d4ed8; font-weight: 600; }
+    .tree-node .indent { display: inline-block; }
+    .tree-node .arrow { width: 12px; color: #94a3b8; font-size: 10px; }
+
+    .file-list-wrap { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    .file-list-header {
+      display: grid;
+      grid-template-columns: minmax(120px, 1.5fr) 80px 90px 130px 90px 60px;
+      background: #f1f5f9;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 11px;
+      color: #64748b;
+      padding: 4px 8px;
+      flex-shrink: 0;
+    }
+    .file-list-body { flex: 1; overflow: auto; }
+    .file-row {
+      display: grid;
+      grid-template-columns: minmax(120px, 1.5fr) 80px 90px 130px 90px 60px;
+      padding: 4px 8px;
+      font-size: 12px;
+      cursor: pointer;
+      border-bottom: 1px solid #f8fafc;
+      align-items: center;
+      color: #334155;
+    }
+    .file-row:hover { background: #f0f6ff; }
+    .file-row.selected { background: #dbeafe; }
+    .file-row .name { display: flex; align-items: center; gap: 6px; overflow: hidden; }
+    .file-row .name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-row.dir .name { font-weight: 600; color: #1e40af; }
+    .file-row .muted { color: #64748b; font-size: 11px; }
+
+    .file-status {
+      height: 24px;
+      background: #f1f5f9;
+      border-top: 1px solid #e2e8f0;
+      padding: 0 10px;
+      font-size: 11px;
+      color: #64748b;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-shrink: 0;
+    }
+    .file-status .ok { color: #16a34a; }
+    .file-status .err { color: #dc2626; }
+
+    /* 命令面板（第二个 Tab） */
+    .cmd-panel { display: none; flex: 1; flex-direction: column; padding: 12px; gap: 8px; overflow: auto; }
+    .cmd-panel.active { display: flex; }
+    .cmd-panel textarea {
+      flex: 1; min-height: 80px; font-family: monospace; font-size: 12px;
+      border: 1px solid #dbe3ee; border-radius: 6px; padding: 8px; resize: none;
+    }
+    .cmd-history { font-size: 11px; color: #64748b; }
+
+    /* 传输队列浮层 */
+    .transfer-toast {
+      position: fixed;
+      bottom: 16px;
+      right: 16px;
+      width: 320px;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      box-shadow: 0 12px 40px rgba(15,23,42,0.18);
+      z-index: 100;
+      display: none;
+      overflow: hidden;
+    }
+    .transfer-toast.show { display: block; }
+    .transfer-head {
+      padding: 8px 12px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 12px;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+    }
+    .transfer-body { padding: 10px 12px; font-size: 12px; }
+    .transfer-item { margin-bottom: 8px; }
+    .transfer-item .name { color: #334155; margin-bottom: 4px; }
+    .transfer-item .progress { height: 4px; background: #e2e8f0; border-radius: 2px; overflow: hidden; }
+    .transfer-item .progress-bar { height: 100%; background: #2563eb; width: 0%; transition: width 0.3s; }
+
+    /* 右键菜单 */
+    .ctx-menu {
+      position: fixed;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      box-shadow: 0 8px 24px rgba(15,23,42,0.15);
+      z-index: 200;
+      min-width: 160px;
+      display: none;
+      padding: 4px 0;
+      font-size: 12px;
+    }
+    .ctx-menu.show { display: block; }
+    .ctx-menu div {
+      padding: 7px 14px;
+      cursor: pointer;
+      color: #334155;
+    }
+    .ctx-menu div:hover { background: #f0f6ff; color: #1d4ed8; }
+    .ctx-menu .sep { height: 1px; background: #e2e8f0; margin: 4px 0; padding: 0; cursor: default; }
+    .ctx-menu .sep:hover { background: #e2e8f0; }
+    .ctx-menu .hint { padding: 6px 14px; font-size: 10px; color: #94a3b8; cursor: default; }
+    .ctx-menu .hint:hover { background: transparent; color: #94a3b8; }
+
+    /* ===== 右侧传输面板（FinalShell 文件传输 / 历史） ===== */
+    .transfer-panel {
+      width: 280px;
+      background: #fff;
+      border-left: 1px solid #cbd5e1;
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+    .transfer-panel.collapsed { width: 0; border: none; overflow: hidden; }
+    .transfer-panel-head {
+      height: 32px;
+      background: #eef2f7;
+      border-bottom: 1px solid #d0d8e4;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #64748b;
+      flex-shrink: 0;
+    }
+    .transfer-panel-head button {
+      border: none; background: transparent; cursor: pointer; color: #64748b; font-size: 12px;
+    }
+    .transfer-dir-row {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      padding: 8px 10px;
+      border-bottom: 1px solid #e2e8f0;
+      background: #fafbfc;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .transfer-dir-row .label { color: #64748b; flex-shrink: 0; }
+    .transfer-dir-row .path {
+      flex: 1; color: #2563eb; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer;
+    }
+    .transfer-dir-row .path:hover { text-decoration: underline; }
+    .transfer-dir-row .icon-btn {
+      width: 24px; height: 24px; border: 1px solid #dbe3ee; background: #fff; border-radius: 3px; cursor: pointer; font-size: 12px;
+    }
+    .transfer-list { flex: 1; overflow: auto; min-height: 120px; }
+    .transfer-row {
+      display: flex;
+      align-items: center;
+      padding: 8px 10px;
+      border-bottom: 1px solid #f1f5f9;
+      font-size: 12px;
+      gap: 6px;
+    }
+    .transfer-row .arrow { color: #64748b; font-size: 11px; flex-shrink: 0; }
+    .transfer-row .fname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #334155; }
+    .transfer-row .status { color: #64748b; font-size: 11px; flex-shrink: 0; }
+    .transfer-row .status.done { color: #16a34a; }
+    .transfer-row .status.err { color: #dc2626; }
+    .transfer-row.running { background: #f8fbff; }
+    .transfer-row .progress-wrap { padding: 0 10px 8px; }
+    .transfer-row .progress { height: 4px; background: #e2e8f0; border-radius: 2px; overflow: hidden; }
+    .transfer-row .progress-bar { height: 100%; background: #2563eb; width: 0%; transition: width 0.25s; }
+    .transfer-row .progress-bar.upload { background: #2563eb; }
+    .transfer-row .progress-bar.download { background: #16a34a; }
+    .transfer-footer {
+      height: 28px;
+      background: #1e293b;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      gap: 12px;
+      font-size: 11px;
+      flex-shrink: 0;
+    }
+    .transfer-footer button {
+      border: none; background: transparent; color: #cbd5e1; cursor: pointer; font-size: 11px;
+    }
+    .transfer-footer button:hover { color: #fff; }
+    .transfer-footer .spacer { flex: 1; }
+
+    /* 设计说明块（原型文档） */
+    .design-note {
+      margin: 8px 10px;
+      padding: 8px 10px;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 6px;
+      font-size: 11px;
+      color: #92400e;
+      line-height: 1.5;
+      flex-shrink: 0;
+    }
+    .design-note strong { color: #78350f; }
+    .design-note ul { margin: 6px 0 0 16px; }
+  </style>
+</head>
+<body>
+
+<div class="proto-banner">
+  <strong>交互原型</strong> — FinalShell 风格：上 SSH 终端 + 下 SFTP + 右侧传输队列。
+  本版设计补充：<strong>上传/下载文件夹</strong>（递归传输、保留目录结构、队列显示整体进度）。
+  纯 HTML  mock，不连后端。
+  <button type="button" onclick="document.querySelector('.proto-banner').style.display='none'">隐藏说明</button>
+</div>
+
+<div class="win-title">
+  <span class="logo">ssh-go</span>
+  <span id="sessionTitle">192.168.111.32 — root@公司</span>
+</div>
+
+<div class="workspace">
+  <!-- 左侧系统监控（原型 mock） -->
+  <aside class="sys-panel" id="sysPanel">
+    <div class="sys-head">系统信息</div>
+    <div class="sys-body">
+      <div class="metric">
+        <div class="metric-label"><span>CPU</span><span>12%</span></div>
+        <div class="bar"><div class="bar-fill cpu"></div></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label"><span>内存</span><span>843M / 1.8G</span></div>
+        <div class="bar"><div class="bar-fill mem"></div></div>
+      </div>
+      <div class="metric">
+        <div class="metric-label"><span>Swap</span><span>0%</span></div>
+        <div class="bar"><div class="bar-fill swap"></div></div>
+      </div>
+      <table class="proc-table">
+        <tr><th>内存</th><th>CPU</th><th>命令</th></tr>
+        <tr><td>184M</td><td>1.2</td><td>sshd</td></tr>
+        <tr><td>96M</td><td>0.3</td><td>nginx</td></tr>
+        <tr><td>42M</td><td>0.1</td><td>crond</td></tr>
+      </table>
+      <div class="disk-item" style="margin-top:10px">
+        <div class="path">/</div>
+        <div class="size">可用 18.2G / 总计 40G</div>
+        <div class="bar" style="margin-top:3px"><div class="bar-fill mem" style="width:54%"></div></div>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main-col">
+    <div class="tab-bar">
+      <button class="rail-btn" title="连接管理器" onclick="alert('原型：打开连接管理器')">📁</button>
+      <div class="tabs" id="sessionTabs">
+        <div class="tab active" data-id="s1"><span class="dot"></span>192.168.111.32<span class="close">×</span></div>
+        <div class="tab" data-id="s2"><span class="dot"></span>192.168.111.33<span class="close">×</span></div>
+      </div>
+      <div class="tab-actions">
+        <button title="折叠/展开传输面板" onclick="toggleTransferPanel()">⇅</button>
+        <button title="折叠系统信息" onclick="toggleSys()">◧</button>
+        <button title="折叠/展开文件面板" onclick="toggleFilePane()">▤</button>
+      </div>
+    </div>
+
+    <div class="split-wrap" id="splitWrap">
+      <!-- 终端区 -->
+      <div class="terminal-pane" id="termPane">
+        <div class="terminal-screen" id="termScreen">Last login: Tue Aug 19 10:34:05 2026 from 192.168.0.100
+[root@bogon ~]# pwd
+/root
+[root@bogon ~]# ls
+anaconda-ks.cfg  install.log  install.log.syslog
+[root@bogon ~]# </div>
+        <div class="terminal-input-row">
+          <span class="terminal-prompt">[root@bogon ~]#</span>
+          <input class="terminal-input" id="termInput" placeholder="输入命令，Enter 发送（原型仅 echo）" />
+        </div>
+        <div class="terminal-hint">双击 Ctrl 切换本地/远程 · Alt 历史命令 · Tab 路径补全（正式版实现）</div>
+      </div>
+
+      <div class="splitter" id="splitter" title="拖拽调整终端/文件区高度"></div>
+
+      <!-- 文件区 SFTP/FTP -->
+      <div class="file-pane" id="filePane">
+        <div class="file-tabs">
+          <div class="file-tab active" data-panel="files" onclick="switchFileTab('files')">文件</div>
+          <div class="file-tab" data-panel="cmd" onclick="switchFileTab('cmd')">命令</div>
+          <span class="file-tab-spacer"></span>
+          <span class="file-tab-tools">
+            <button title="聚焦传输面板" onclick="toggleTransferPanel(); document.getElementById('transferPanel').classList.remove('collapsed')">⇅</button>
+          </span>
+        </div>
+
+        <div id="filesPanel" style="display:flex;flex-direction:column;flex:1;min-height:0">
+          <div class="file-toolbar">
+            <button class="ft-btn" onclick="goUp()" title="上级">⬆ 上级</button>
+            <button class="ft-btn" onclick="refreshFiles()">🔄 刷新</button>
+            <span class="ft-sep"></span>
+            <button class="ft-btn primary" onclick="mockUpload(false)">⬆ 上传</button>
+            <button class="ft-btn" onclick="mockUpload(true)" title="选择本地文件夹，递归上传到当前远端目录">📁 上传文件夹</button>
+            <button class="ft-btn" id="btnDownload" disabled onclick="mockDownload()">⬇ 下载</button>
+            <button class="ft-btn" onclick="mockMkdir()">📁 新建文件夹</button>
+            <button class="ft-btn" id="btnDelete" disabled onclick="mockDelete()">🗑 删除</button>
+            <button class="ft-btn" id="btnRename" disabled onclick="mockRename()">✏ 重命名</button>
+            <span class="ft-sep"></span>
+            <button class="ft-btn" onclick="alert('原型：切换 SFTP / FTP 协议（正式版在连接配置里）')">SFTP ▾</button>
+            <div class="path-bar" id="pathBar"></div>
+          </div>
+          <div class="file-body">
+            <div class="dir-tree" id="dirTree"></div>
+            <div class="file-list-wrap">
+              <div class="file-list-header">
+                <span>名称</span><span>大小</span><span>类型</span><span>修改时间</span><span>权限</span><span>用户</span>
+              </div>
+              <div class="file-list-body" id="fileList"></div>
+            </div>
+          </div>
+          <div class="file-status" id="fileStatus">
+            <span>协议: SFTP（与 SSH 同连接复用）</span>
+            <span id="statusMsg">就绪</span>
+          </div>
+        </div>
+
+        <div class="cmd-panel" id="cmdPanel">
+          <div style="font-size:12px;color:#64748b">批量命令（选中多台后执行，原型演示）</div>
+          <textarea placeholder="输入要在远端执行的命令…">yum install -y wget
+systemctl status sshd</textarea>
+          <button class="ft-btn primary" style="width:120px" onclick="setStatus('命令已加入队列（原型）', 'ok')">执行</button>
+          <div class="cmd-history">历史: systemctl restart nginx · df -h · tail -f /var/log/messages</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 右侧：文件传输 / 历史（FinalShell 风格） -->
+  <aside class="transfer-panel" id="transferPanel">
+    <div class="transfer-panel-head">
+      <span>文件传输</span>
+      <button type="button" onclick="clearTransferHistory()">清除</button>
+    </div>
+    <div class="design-note">
+      <strong>文件夹传输设计</strong>
+      <ul>
+        <li><strong>上传文件夹</strong>：选本地目录 → 递归上传至当前 SFTP 路径，保留子目录结构</li>
+        <li><strong>下载文件夹</strong>：选中远端文件夹 → 递归下载到「默认下载目录/文件夹名」</li>
+        <li><strong>进度</strong>：按总字节汇总显示；队列条目显示文件名 + 已完成/百分比</li>
+        <li><strong>存储</strong>：传输历史可 localStorage；文件内容在远端/本机磁盘，不进 SQLite</li>
+      </ul>
+    </div>
+    <div class="transfer-dir-row">
+      <span class="label">下载:</span>
+      <span class="path" id="downloadDirPath" title="点击选择默认下载目录" onclick="pickDownloadDir()">D:\61765\Desktop\fsdownload</span>
+      <button class="icon-btn" title="选择目录" onclick="pickDownloadDir()">📁</button>
+      <button class="icon-btn" title="打开文件夹" onclick="alert('原型：打开资源管理器')">📂</button>
+    </div>
+    <div class="transfer-list" id="transferList">
+      <div class="transfer-row">
+        <span class="arrow">↓</span>
+        <span class="fname">原型地址(3).txt</span>
+        <span class="status done">已完成</span>
+      </div>
+    </div>
+    <div class="transfer-footer">
+      <button type="button" onclick="alert('原型：查看全部传输历史')">历史</button>
+      <button type="button" onclick="pickDownloadDir()">选项</button>
+      <span class="spacer"></span>
+      <span title="传输队列">⇅</span>
+    </div>
+  </aside>
+</div>
+
+<!-- 右键菜单 -->
+<div class="ctx-menu" id="ctxMenu">
+  <div onclick="ctxAction('open')">打开</div>
+  <div id="ctxDownload" onclick="ctxAction('download')">下载</div>
+  <div class="sep"></div>
+  <div onclick="ctxAction('rename')">重命名</div>
+  <div onclick="ctxAction('delete')">删除</div>
+  <div class="sep"></div>
+  <div onclick="ctxAction('chmod')">修改权限</div>
+  <div onclick="ctxAction('copyPath')">复制路径</div>
+  <div class="sep"></div>
+  <div class="hint">选中文件夹时「下载」递归整目录</div>
+</div>
+
+<script>
+  // ===== 模拟远端目录（正式版由 Go SFTP 客户端提供） =====
+  const FS = {
+    '/': { type: 'dir', children: ['root', 'etc', 'var', 'home', 'usr'] },
+    '/root': { type: 'dir', children: ['.ssh', '.bashrc', '.bash_profile', 'install.log', 'logs'] },
+    '/root/.ssh': { type: 'dir', children: ['authorized_keys', 'id_rsa', 'known_hosts'] },
+    '/root/logs': { type: 'dir', children: ['app.log', 'error.log'] },
+    '/etc': { type: 'dir', children: ['ssh', 'nginx', 'hosts'] },
+    '/var': { type: 'dir', children: ['log', 'www'] },
+    '/home': { type: 'dir', children: [] },
+    '/usr': { type: 'dir', children: ['bin', 'local'] },
+  };
+
+  const FILE_META = {
+    '.ssh': { size: '-', type: '文件夹', time: '2024/01/15 10:20', perm: 'drwx------', user: '0/0', dir: true },
+    '.bashrc': { size: '176 B', type: 'BASH_RC', time: '2023/06/01 08:00', perm: '-rw-r--r--', user: '0/0' },
+    '.bash_profile': { size: '176 B', type: 'BASH_PRO...', time: '2023/06/01 08:00', perm: '-rw-r--r--', user: '0/0' },
+    'install.log': { size: '12.5 KB', type: 'LOG', time: '2023/05/20 14:32', perm: '-rw-r--r--', user: '0/0' },
+    'logs': { size: '-', type: '文件夹', time: '2025/03/10 09:15', perm: 'drwxr-xr-x', user: '0/0', dir: true },
+    'authorized_keys': { size: '398 B', type: 'KEYS', time: '2024/08/01 11:00', perm: '-rw-------', user: '0/0' },
+    'id_rsa': { size: '1.6 KB', type: 'RSA_KEY', time: '2024/08/01 11:00', perm: '-rw-------', user: '0/0' },
+    'known_hosts': { size: '2.1 KB', type: 'HOSTS', time: '2025/01/08 16:22', perm: '-rw-r--r--', user: '0/0' },
+    'app.log': { size: '4.2 MB', type: 'LOG', time: '2026/08/19 10:00', perm: '-rw-r--r--', user: '0/0' },
+    'error.log': { size: '128 KB', type: 'LOG', time: '2026/08/18 23:55', perm: '-rw-r--r--', user: '0/0' },
+    'root': { size: '-', type: '文件夹', time: '2023/05/20 14:30', perm: 'drwxr-x---', user: '0/0', dir: true },
+    'etc': { size: '-', type: '文件夹', time: '2023/05/01 00:00', perm: 'drwxr-xr-x', user: '0/0', dir: true },
+    'var': { size: '-', type: '文件夹', time: '2023/05/01 00:00', perm: 'drwxr-xr-x', user: '0/0', dir: true },
+    'home': { size: '-', type: '文件夹', time: '2023/05/01 00:00', perm: 'drwxr-xr-x', user: '0/0', dir: true },
+    'usr': { size: '-', type: '文件夹', time: '2023/05/01 00:00', perm: 'drwxr-xr-x', user: '0/0', dir: true },
+    'ssh': { size: '-', type: '文件夹', time: '2024/02/01 00:00', perm: 'drwxr-xr-x', user: '0/0', dir: true },
+    'nginx': { size: '-', type: '文件夹', time: '2024/03/01 00:00', perm: 'drwxr-xr-x', user: '0/0', dir: true },
+    'hosts': { size: '220 B', type: 'HOSTS', time: '2023/05/01 00:00', perm: '-rw-r--r--', user: '0/0' },
+    'log': { size: '-', type: '文件夹', time: '2023/05/01 00:00', perm: 'drwxr-xr-x', user: '0/0', dir: true },
+    'www': { size: '-', type: '文件夹', time: '2024/06/01 00:00', perm: 'drwxr-xr-x', user: '0/0', dir: true },
+    'bin': { size: '-', type: '文件夹', time: '2023/05/01 00:00', perm: 'drwxr-xr-x', user: '0/0', dir: true },
+    'local': { size: '-', type: '文件夹', time: '2023/05/01 00:00', perm: 'drwxr-xr-x', user: '0/0', dir: true },
+  };
+
+  let currentPath = '/root';
+  let selectedFile = null;
+  let downloadDir = 'D:\\61765\\Desktop\\fsdownload';
+  const transferHistory = [];
+
+  function isSelectedDir() {
+    if (!selectedFile || selectedFile === '..') return false;
+    const full = currentPath === '/' ? '/' + selectedFile : currentPath + '/' + selectedFile;
+    const meta = FILE_META[selectedFile];
+    return !!(meta?.dir || FS[full]?.type === 'dir');
+  }
+
+  function listDir(path) {
+    const node = FS[path];
+    if (!node || node.type !== 'dir') return [];
+    return node.children.map(name => {
+      const full = path === '/' ? '/' + name : path + '/' + name;
+      const meta = FILE_META[name] || { size: '1 KB', type: 'FILE', time: '-', perm: '-rw-r--r--', user: '0/0' };
+      const isDir = meta.dir || FS[full]?.type === 'dir';
+      return { name, full, isDir, ...meta };
+    });
+  }
+
+  function renderPathBar() {
+    const parts = currentPath.split('/').filter(Boolean);
+    let html = '<span class="crumb" onclick="navigate(\'/\')">/</span>';
+    let acc = '';
+    parts.forEach(p => {
+      acc += '/' + p;
+      const path = acc;
+      html += '<span class="sep">/</span><span class="crumb" onclick="navigate(\'' + path + '\')">' + p + '</span>';
+    });
+    document.getElementById('pathBar').innerHTML = html;
+  }
+
+  function renderTree() {
+    const tree = document.getElementById('dirTree');
+    const paths = ['/', '/root', '/root/.ssh', '/root/logs', '/etc', '/var'];
+    tree.innerHTML = paths.map(p => {
+      const label = p === '/' ? '/' : p.split('/').pop();
+      const depth = p === '/' ? 0 : p.split('/').filter(Boolean).length - 1;
+      const active = currentPath === p || currentPath.startsWith(p + '/');
+      return '<div class="tree-node' + (currentPath === p ? ' active' : '') + '" style="padding-left:' + (8 + depth * 14) + 'px" onclick="navigate(\'' + p + '\')">' +
+        '<span class="arrow">▾</span>📁 <span>' + label + '</span></div>';
+    }).join('');
+  }
+
+  function renderFileList() {
+    const list = document.getElementById('fileList');
+    const items = listDir(currentPath);
+    if (currentPath !== '/') {
+      items.unshift({ name: '..', full: '..', isDir: true, size: '-', type: '上级', time: '-', perm: '-', user: '-' });
+    }
+    list.innerHTML = items.map(f => {
+      const icon = f.isDir ? '📁' : '📄';
+      const cls = 'file-row' + (f.isDir ? ' dir' : '') + (selectedFile === f.name ? ' selected' : '');
+      return '<div class="' + cls + '" data-name="' + f.name + '" onclick="selectFile(\'' + f.name.replace(/'/g, "\\'") + '\')" ondblclick="openEntry(\'' + f.name.replace(/'/g, "\\'") + '\')" oncontextmenu="showCtx(event,\'' + f.name.replace(/'/g, "\\'") + '\')">' +
+        '<div class="name">' + icon + '<span>' + f.name + '</span></div>' +
+        '<span class="muted">' + f.size + '</span><span class="muted">' + f.type + '</span>' +
+        '<span class="muted">' + f.time + '</span><span class="muted">' + f.perm + '</span><span class="muted">' + f.user + '</span></div>';
+    }).join('');
+    updateToolbar();
+  }
+
+  function navigate(path) {
+    if (path === '..' || path === '..') {
+      const parts = currentPath.split('/').filter(Boolean);
+      parts.pop();
+      currentPath = parts.length ? '/' + parts.join('/') : '/';
+    } else if (FS[path] || path === '/root' || path === '/etc' || path === '/var') {
+      currentPath = path;
+    }
+    selectedFile = null;
+    renderPathBar();
+    renderTree();
+    renderFileList();
+    setStatus('已打开 ' + currentPath);
+  }
+
+  function selectFile(name) {
+    selectedFile = name;
+    renderFileList();
+  }
+
+  function openEntry(name) {
+    if (name === '..') { navigate('..'); return; }
+    const full = currentPath === '/' ? '/' + name : currentPath + '/' + name;
+    const meta = FILE_META[name];
+    if (meta?.dir || FS[full]?.type === 'dir') navigate(full);
+    else setStatus('打开文件: ' + full + '（原型：可接内置编辑器）');
+  }
+
+  function goUp() { navigate('..'); }
+  function refreshFiles() { renderFileList(); setStatus('已刷新', 'ok'); }
+
+  function updateToolbar() {
+    const hasSelection = selectedFile && selectedFile !== '..';
+    document.getElementById('btnDownload').disabled = !hasSelection;
+    document.getElementById('btnDelete').disabled = !hasSelection;
+    document.getElementById('btnRename').disabled = !hasSelection;
+    const ctxDl = document.getElementById('ctxDownload');
+    if (ctxDl) ctxDl.textContent = isSelectedDir() ? '下载文件夹' : '下载';
+  }
+
+  function setStatus(msg, type) {
+    const el = document.getElementById('statusMsg');
+    el.textContent = msg;
+    el.className = type === 'ok' ? 'ok' : type === 'err' ? 'err' : '';
+  }
+
+  function renderTransferList() {
+    const list = document.getElementById('transferList');
+    if (!transferHistory.length) {
+      list.innerHTML = '<div style="padding:16px;color:#94a3b8;font-size:12px;text-align:center">暂无传输任务</div>';
+      return;
+    }
+    list.innerHTML = transferHistory.map((t, i) => {
+      const running = t.status === 'running';
+      const progress = running
+        ? '<div class="progress-wrap"><div class="progress"><div class="progress-bar ' + t.kind + '" style="width:' + t.pct + '%"></div></div></div>'
+        : '';
+      const statusCls = t.status === 'done' ? ' done' : t.status === 'err' ? ' err' : '';
+      const statusText = t.status === 'done' ? '已完成' : t.status === 'err' ? '失败' : t.pct + '%';
+      return '<div class="transfer-row' + (running ? ' running' : '') + '">' +
+        '<span class="arrow">' + (t.kind === 'upload' ? '↑' : '↓') + '</span>' +
+        '<span class="fname" title="' + t.desc + '">' + t.name + '</span>' +
+        '<span class="status' + statusCls + '">' + statusText + '</span></div>' + progress;
+    }).join('');
+  }
+
+  function addTransfer(name, kind, desc) {
+    const item = { name, kind, desc, status: 'running', pct: 0 };
+    transferHistory.unshift(item);
+    renderTransferList();
+    let p = 0;
+    const t = setInterval(() => {
+      p += 8;
+      item.pct = Math.min(p, 100);
+      renderTransferList();
+      if (p >= 100) {
+        clearInterval(t);
+        item.status = 'done';
+        renderTransferList();
+      }
+    }, 180);
+    return item;
+  }
+
+  function mockUpload(isDir) {
+    const folderName = 'my-project';
+    const fileName = 'local-file.zip';
+    if (isDir) {
+      const remote = currentPath + '/' + folderName;
+      runTransfer('上传文件夹', folderName, 'upload', 'C:\\Users\\demo\\' + folderName + ' → ' + remote + '（含子目录）');
+      setStatus('正在上传文件夹 ' + folderName + '…');
+    } else {
+      runTransfer('上传', fileName, 'upload', 'C:\\Users\\demo\\' + fileName + ' → ' + currentPath + '/' + fileName);
+    }
+  }
+
+  function mockDownload() {
+    if (!selectedFile) return;
+    const isDir = isSelectedDir();
+    const remote = currentPath + '/' + selectedFile;
+    const localBase = downloadDir + '\\' + selectedFile;
+    if (isDir) {
+      runTransfer('下载文件夹', selectedFile, 'download', remote + ' → ' + localBase + '\\（递归）');
+      setStatus('正在下载文件夹 ' + selectedFile + ' 到 ' + downloadDir, 'ok');
+    } else {
+      runTransfer('下载', selectedFile, 'download', remote + ' → ' + localBase);
+    }
+  }
+
+  function runTransfer(title, name, kind, desc) {
+    addTransfer(name, kind, desc);
+    setStatus(title + '中…（原型 mock）');
+    setTimeout(() => setStatus(title + '完成（原型）', 'ok'), 2200);
+  }
+
+  function pickDownloadDir() {
+    const v = prompt('默认下载目录（原型）', downloadDir);
+    if (v) {
+      downloadDir = v;
+      document.getElementById('downloadDirPath').textContent = v;
+      setStatus('已设置下载目录: ' + v, 'ok');
+    }
+  }
+
+  function clearTransferHistory() {
+    transferHistory.length = 0;
+    renderTransferList();
+  }
+
+  function toggleTransferPanel() {
+    document.getElementById('transferPanel').classList.toggle('collapsed');
+  }
+
+  function mockMkdir() {
+    const name = prompt('新建文件夹名称', 'new-folder');
+    if (name) setStatus('已创建 ' + currentPath + '/' + name + '（原型）', 'ok');
+  }
+  function mockDelete() {
+    if (!selectedFile || !confirm('删除 ' + selectedFile + '？')) return;
+    setStatus('已删除 ' + selectedFile + '（原型）', 'ok');
+    selectedFile = null;
+    renderFileList();
+  }
+  function mockRename() {
+    if (!selectedFile) return;
+    const n = prompt('重命名为', selectedFile);
+    if (n) setStatus('已重命名（原型）', 'ok');
+  }
+
+  function switchFileTab(panel) {
+    document.querySelectorAll('.file-tab').forEach(t => t.classList.toggle('active', t.dataset.panel === panel));
+    document.getElementById('filesPanel').style.display = panel === 'files' ? 'flex' : 'none';
+    document.getElementById('cmdPanel').classList.toggle('active', panel === 'cmd');
+  }
+
+  function toggleSys() {
+    document.getElementById('sysPanel').classList.toggle('collapsed');
+  }
+  function toggleFilePane() {
+    document.getElementById('filePane').classList.toggle('collapsed');
+  }
+
+  // Tab 切换
+  document.getElementById('sessionTabs').addEventListener('click', e => {
+    if (e.target.classList.contains('close')) return;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    e.target.closest('.tab')?.classList.add('active');
+  });
+
+  // 终端输入
+  document.getElementById('termInput').addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    const cmd = e.target.value.trim();
+    if (!cmd) return;
+    const screen = document.getElementById('termScreen');
+    screen.textContent += cmd + '\n';
+    if (cmd === 'ls') screen.textContent += listDir(currentPath).map(f => f.name).join('  ') + '\n';
+    else if (cmd === 'pwd') screen.textContent += currentPath + '\n';
+    else screen.textContent += '[原型] 命令已发送: ' + cmd + '\n';
+    screen.textContent += '[root@bogon ~]# ';
+    e.target.value = '';
+    screen.scrollTop = screen.scrollHeight;
+  });
+
+  // 拖拽分割条
+  (function initSplitter() {
+    const splitter = document.getElementById('splitter');
+    const filePane = document.getElementById('filePane');
+    const wrap = document.getElementById('splitWrap');
+    let dragging = false;
+    splitter.addEventListener('mousedown', () => { dragging = true; document.body.style.cursor = 'row-resize'; });
+    document.addEventListener('mousemove', e => {
+      if (!dragging) return;
+      const rect = wrap.getBoundingClientRect();
+      const h = rect.bottom - e.clientY;
+      filePane.style.height = Math.max(100, Math.min(rect.height - 120, h)) + 'px';
+    });
+    document.addEventListener('mouseup', () => { dragging = false; document.body.style.cursor = ''; });
+  })();
+
+  // 右键菜单
+  function showCtx(e, name) {
+    e.preventDefault();
+    selectFile(name);
+    const m = document.getElementById('ctxMenu');
+    m.style.left = e.clientX + 'px';
+    m.style.top = e.clientY + 'px';
+    m.classList.add('show');
+  }
+  document.addEventListener('click', () => document.getElementById('ctxMenu').classList.remove('show'));
+  function ctxAction(action) {
+    if (action === 'download') mockDownload();
+    else if (action === 'delete') mockDelete();
+    else if (action === 'rename') mockRename();
+    else if (action === 'open') openEntry(selectedFile);
+    else if (action === 'copyPath') { navigator.clipboard?.writeText(currentPath + '/' + selectedFile); setStatus('路径已复制', 'ok'); }
+    else alert('原型：' + action);
+  }
+
+  // 初始化
+  renderTransferList();
+  navigate('/root');
+</script>
+</body>
+</html>

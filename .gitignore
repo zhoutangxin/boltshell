@@ -1,5 +1,5 @@
 bin/
-build/
+build/bin/
 dist/
 *.log
 *.tmp

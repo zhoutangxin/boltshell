@@ -10,8 +10,60 @@ export function CloseSession(arg1) {
   return window['go']['main']['App']['CloseSession'](arg1);
 }
 
+export function DownloadFromRemote(arg1, arg2, arg3) {
+  return window['go']['main']['App']['DownloadFromRemote'](arg1, arg2, arg3);
+}
+
+export function GetRemoteHome(arg1) {
+  return window['go']['main']['App']['GetRemoteHome'](arg1);
+}
+
+export function GetSessionSysInfo(arg1) {
+  return window['go']['main']['App']['GetSessionSysInfo'](arg1);
+}
+
 export function ListConnections(arg1, arg2) {
   return window['go']['main']['App']['ListConnections'](arg1, arg2);
+}
+
+export function ListRemoteDir(arg1, arg2) {
+  return window['go']['main']['App']['ListRemoteDir'](arg1, arg2);
+}
+
+export function MkdirRemote(arg1, arg2) {
+  return window['go']['main']['App']['MkdirRemote'](arg1, arg2);
+}
+
+export function OpenLocalFolder(arg1) {
+  return window['go']['main']['App']['OpenLocalFolder'](arg1);
+}
+
+export function PickDownloadDir() {
+  return window['go']['main']['App']['PickDownloadDir']();
+}
+
+export function PickLocalDir() {
+  return window['go']['main']['App']['PickLocalDir']();
+}
+
+export function PickLocalFile() {
+  return window['go']['main']['App']['PickLocalFile']();
+}
+
+export function PickSaveFile(arg1) {
+  return window['go']['main']['App']['PickSaveFile'](arg1);
+}
+
+export function RemoveRemote(arg1, arg2) {
+  return window['go']['main']['App']['RemoveRemote'](arg1, arg2);
+}
+
+export function RenameRemote(arg1, arg2, arg3) {
+  return window['go']['main']['App']['RenameRemote'](arg1, arg2, arg3);
+}
+
+export function ResizeSession(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ResizeSession'](arg1, arg2, arg3);
 }
 
 export function SendSessionInput(arg1, arg2) {
@@ -24,4 +76,12 @@ export function SetDeleted(arg1, arg2) {
 
 export function StartSession(arg1) {
   return window['go']['main']['App']['StartSession'](arg1);
+}
+
+export function UpdateConnection(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
+  return window['go']['main']['App']['UpdateConnection'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+}
+
+export function UploadToRemote(arg1, arg2, arg3) {
+  return window['go']['main']['App']['UploadToRemote'](arg1, arg2, arg3);
 }

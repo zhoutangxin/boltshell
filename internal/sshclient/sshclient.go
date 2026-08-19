@@ -4,6 +4,7 @@ import (
 	"bytes" // 用于缓冲命令执行的标准输出和错误输出
 	"fmt"   // 字符串格式化和错误信息构造
 	"io"    // 定义通用的 Reader / Writer 接口
+	"net"   // TCP 连接与 KeepAlive
 	"os"    // 访问标准输入输出、文件描述符等
 	"time"  // 超时时间设置
 
@@ -35,7 +36,7 @@ func Interactive(host string, port int, user, pass string) error { // 在当前�
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),          // 不校验主机公钥（简单起见）
 		Timeout:         10 * time.Second,                     // 连接超时时间 10 秒
 	}
-	c, err := ssh.Dial("tcp", addr, cfg) // 建立到远端的 SSH 连接
+	c, err := dialSSH(addr, cfg) // 建立到远端的 SSH 连接（含 TCP KeepAlive）
 	if err != nil {
 		return err
 	}
@@ -84,7 +85,7 @@ func NewTerminalSession(host string, port int, user, pass string, width, height 
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         10 * time.Second,
 	}
-	c, err := ssh.Dial("tcp", addr, cfg) // 建立 SSH 连接
+	c, err := dialSSH(addr, cfg) // 建立 SSH 连接（含 TCP KeepAlive）
 	if err != nil {
 		return nil, err
 	}
@@ -124,14 +125,28 @@ func NewTerminalSession(host string, port int, user, pass string, width, height 
 		c.Close()
 		return nil, err
 	}
-	go func() { _ = s.Shell() }() // 在后台启动远端 shell，忽略其返回错误
-	return &TerminalSession{      // 把所有资源封装成 TerminalSession 返回
+	// Shell() 必须同步启动成功后再返回。若放到 goroutine，后续 Wait() 会抢跑并立刻关掉会话。
+	if err := s.Shell(); err != nil {
+		stdin.Close()
+		s.Close()
+		c.Close()
+		return nil, err
+	}
+	return &TerminalSession{
 		client:  c,
 		session: s,
 		Stdin:   stdin,
 		Stdout:  stdout,
 		Stderr:  stderr,
 	}, nil
+}
+
+// SSHClient 返回底层 SSH 连接，供 SFTP 等同连接复用
+func (t *TerminalSession) SSHClient() *ssh.Client {
+	if t == nil {
+		return nil
+	}
+	return t.client
 }
 
 func (t *TerminalSession) Close() error { // 关闭终端会话及其底层 SSH 连接
@@ -145,6 +160,46 @@ func (t *TerminalSession) Close() error { // 关闭终端会话及其底层 SSH 
 		return t.client.Close()
 	}
 	return nil
+}
+
+// Wait 阻塞直到远端 shell 会话结束
+func (t *TerminalSession) Wait() error {
+	if t == nil || t.session == nil {
+		return nil
+	}
+	return t.session.Wait()
+}
+
+// Resize 同步远端 PTY 尺寸（切换 Tab / 窗口缩放时调用）
+func (t *TerminalSession) Resize(cols, rows int) error {
+	if t == nil || t.session == nil {
+		return fmt.Errorf("session not ready")
+	}
+	if cols < 1 {
+		cols = 80
+	}
+	if rows < 1 {
+		rows = 24
+	}
+	return t.session.WindowChange(rows, cols)
+}
+
+func dialSSH(addr string, cfg *ssh.ClientConfig) (*ssh.Client, error) {
+	dialer := net.Dialer{Timeout: 10 * time.Second}
+	conn, err := dialer.Dial("tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	if tcp, ok := conn.(*net.TCPConn); ok {
+		_ = tcp.SetKeepAlive(true)
+		_ = tcp.SetKeepAlivePeriod(30 * time.Second)
+	}
+	sshConn, chans, reqs, err := ssh.NewClientConn(conn, addr, cfg)
+	if err != nil {
+		_ = conn.Close()
+		return nil, err
+	}
+	return ssh.NewClient(sshConn, chans, reqs), nil
 }
 
 func setRaw() func() { // 把当前控制台切换到 raw 模式，并返回恢复函数
@@ -170,7 +225,7 @@ func Connect(host string, port int, user, pass string) error { // 只测试是�
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         10 * time.Second,
 	}
-	c, err := ssh.Dial("tcp", addr, cfg) // 建立 SSH 连接
+	c, err := dialSSH(addr, cfg) // 建立 SSH 连接（含 TCP KeepAlive）
 	if err != nil {
 		return err
 	}
@@ -184,6 +239,28 @@ func Connect(host string, port int, user, pass string) error { // 只测试是�
 		return err
 	}
 	return nil
+}
+
+// RunOnClient 在已有 SSH 连接上执行命令（不占用交互式 shell 会话）
+func RunOnClient(client *ssh.Client, cmd string) (Result, error) {
+	if client == nil {
+		return Result{}, fmt.Errorf("client nil")
+	}
+	if cmd == "" {
+		return Result{}, fmt.Errorf("命令为空")
+	}
+	s, err := client.NewSession()
+	if err != nil {
+		return Result{}, err
+	}
+	defer s.Close()
+	var outBuf, errBuf bytes.Buffer
+	s.Stdout = &outBuf
+	s.Stderr = &errBuf
+	if err := s.Run(cmd); err != nil {
+		return Result{Stdout: outBuf.String(), Stderr: errBuf.String()}, err
+	}
+	return Result{Stdout: outBuf.String(), Stderr: errBuf.String()}, nil
 }
 
 func Run(host string, port int, user, pass, cmd string) (Result, error) { // 在远端执行单条命令并返回输出

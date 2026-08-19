@@ -3,6 +3,7 @@ package db // 数据库访问层：封装 SQLite 相关操作
 import (
 	"crypto/rand"          // 标准库：安全随机数，用于生成 ID
 	"database/sql"         // 标准库：通用数据库接口
+	"fmt"                  // 标准库：错误信息
 	_ "modernc.org/sqlite" // 第三方：纯 Go 的 SQLite 驱动（仅导入以注册驱动）
 	"os"                   // 标准库：可执行文件路径获取
 	"path/filepath"        // 标准库：路径拼接
@@ -148,6 +149,25 @@ func ensureColumn(db *sql.DB, table, col, def string) error {
 func SetDeleted(db *sql.DB, id string, deleted int) error {
 	_, err := db.Exec(`UPDATE connections SET deleted=? WHERE id=?`, deleted, id)
 	return err
+}
+
+// UpdateConnection 按 ID 更新连接配置（不改 deleted、created_at）
+func UpdateConnection(db *sql.DB, c Connection) error {
+	res, err := db.Exec(
+		`UPDATE connections SET name=?, host=?, port=?, user=?, password=?, group_name=?, enabled=? WHERE id=?`,
+		c.Name, c.Host, c.Port, c.User, c.Password, c.GroupName, c.Enabled, c.ID,
+	)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return fmt.Errorf("连接不存在")
+	}
+	return nil
 }
 
 // GetByID 根据 ID 查询一条连接配置记录

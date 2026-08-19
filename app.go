@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"ssh-go/internal/config"
 	"ssh-go/internal/db"
 	"ssh-go/internal/logging"
+	"ssh-go/internal/sftpclient"
 	"ssh-go/internal/sshclient"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -42,9 +44,11 @@ func (a *App) startup(ctx context.Context) {
 }
 
 type terminalHolder struct {
-	connID string
-	title  string
-	term   *sshclient.TerminalSession
+	connID   string
+	title    string
+	term     *sshclient.TerminalSession
+	sftp     *sftpclient.Client
+	finalize sync.Once
 }
 
 func (a *App) initBackend() error {
@@ -103,7 +107,7 @@ func (a *App) ListConnections(includeDeleted bool, groupFilter string) ([]db.Con
 	return db.ListConnections(a.db, includeDeleted, groupFilter)
 }
 
-// AddConnection: 新增一条连接记录（GUI 只做新增，不做编辑，和你现有 Gio 一致）
+// AddConnection: 新增一条连接记录
 func (a *App) AddConnection(name string, host string, port int, user string, password string, groupName string, enabled bool) (string, error) {
 	if a.db == nil {
 		return "", fmt.Errorf("db not initialized")
@@ -140,6 +144,37 @@ func (a *App) AddConnection(name string, host string, port int, user string, pas
 	return id, nil
 }
 
+// UpdateConnection: 修改已有连接
+func (a *App) UpdateConnection(id string, name string, host string, port int, user string, password string, groupName string, enabled bool) error {
+	if a.db == nil {
+		return fmt.Errorf("db not initialized")
+	}
+	if id == "" {
+		return fmt.Errorf("缺少连接 ID")
+	}
+	if host == "" || user == "" || password == "" {
+		return fmt.Errorf("缺少必填项")
+	}
+	p := port
+	if p < 0 {
+		p = 0
+	}
+	en := 0
+	if enabled {
+		en = 1
+	}
+	return db.UpdateConnection(a.db, db.Connection{
+		ID:        id,
+		Name:      name,
+		Host:      host,
+		Port:      p,
+		User:      user,
+		Password:  password,
+		GroupName: groupName,
+		Enabled:   en,
+	})
+}
+
 // SetDeleted: 设置逻辑删除状态（0=正常，1=已删除）
 func (a *App) SetDeleted(connID string, deleted bool) error {
 	if a.db == nil {
@@ -169,17 +204,7 @@ func (a *App) StartSession(connID string) (string, error) {
 		return "", fmt.Errorf("连接未启用")
 	}
 
-	// 一个连接在同一时刻只允许打开一个会话（和你 Gio 的体验一致：已有会话直接激活）
-	a.termMu.Lock()
-	for sid, h := range a.sessions {
-		if h.connID == connID {
-			a.termMu.Unlock()
-			return sid, nil
-		}
-	}
-	a.termMu.Unlock()
-
-	// 宽高：xterm.js 前端会自适应，这里只用于 RequestPty 初始化
+	// 每次连接都创建独立会话，支持多 Tab 同时保持
 	term, err := sshclient.NewTerminalSession(c.Host, c.Port, c.User, c.Password, 120, 32)
 	if err != nil {
 		return "", err
@@ -192,36 +217,94 @@ func (a *App) StartSession(connID string) (string, error) {
 	}
 
 	a.termMu.Lock()
-	a.sessions[sid] = &terminalHolder{
+	h := &terminalHolder{
 		connID: connID,
 		title:  title,
 		term:   term,
 	}
+	if sftpClient, sftpErr := sftpclient.NewFromSSH(term.SSHClient()); sftpErr == nil {
+		h.sftp = sftpClient
+	} else if a.logger != nil {
+		a.logger.Info("sftp init failed id=%s err=%v", sid, sftpErr)
+	}
+	a.sessions[sid] = h
 	a.termMu.Unlock()
 
-	// 异步读取输出并推给前端
-	go a.terminalReadLoop(sid, term)
+	if a.logger != nil {
+		a.logger.Info("session started id=%s host=%s:%d", sid, c.Host, c.Port)
+	}
+
+	go a.terminalReadLoop(sid, term.Stdout, true)
+	if term.Stderr != nil {
+		go a.terminalReadLoop(sid, term.Stderr, false)
+	}
+	go func() {
+		err := term.Wait()
+		if a.logger != nil {
+			a.logger.Info("session wait done id=%s err=%v", sid, err)
+		}
+		a.finalizeSession(sid)
+	}()
 	return sid, nil
 }
 
-func (a *App) terminalReadLoop(sessionID string, term *sshclient.TerminalSession) {
-	if term == nil {
+func (a *App) finalizeSession(sessionID string) {
+	a.termMu.Lock()
+	h := a.sessions[sessionID]
+	if h == nil {
+		a.termMu.Unlock()
+		return
+	}
+	a.termMu.Unlock()
+
+	h.finalize.Do(func() {
+		a.termMu.Lock()
+		delete(a.sessions, sessionID)
+		a.termMu.Unlock()
+		if h.term != nil {
+			_ = h.term.Close()
+		}
+		if h.sftp != nil {
+			_ = h.sftp.Close()
+		}
+		runtime.EventsEmit(a.ctx, "terminal-closed", sessionID)
+	})
+}
+
+func (a *App) terminalReadLoop(sessionID string, r io.Reader, isStdout bool) {
+	if r == nil {
 		return
 	}
 	buf := make([]byte, 4096)
 	for {
-		n, err := term.Stdout.Read(buf)
+		n, err := r.Read(buf)
 		if n > 0 {
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
 			text := decodeRemote(chunk)
+			if a.logger != nil {
+				a.logger.Debug("terminal-output id=%s n=%d", sessionID, n)
+			}
 			runtime.EventsEmit(a.ctx, "terminal-output", sessionID, text)
 		}
 		if err != nil {
-			runtime.EventsEmit(a.ctx, "terminal-closed", sessionID)
+			if isStdout {
+				a.finalizeSession(sessionID)
+			}
 			return
 		}
 	}
+}
+
+// ResizeSession: 前端 xterm 尺寸变化时同步远端 PTY
+func (a *App) ResizeSession(sessionID string, cols int, rows int) error {
+	a.termMu.Lock()
+	h := a.sessions[sessionID]
+	a.termMu.Unlock()
+	if h == nil || h.term == nil {
+		return fmt.Errorf("session not found")
+	}
+	return h.term.Resize(cols, rows)
 }
 
 // SendSessionInput: 前端把 xterm.js 的输入数据写回 SSH
@@ -236,16 +319,28 @@ func (a *App) SendSessionInput(sessionID string, data string) error {
 	return err
 }
 
-// CloseSession: 主动关闭终端（可选）
+// CloseSession: 主动关闭终端
 func (a *App) CloseSession(sessionID string) error {
 	a.termMu.Lock()
 	h := a.sessions[sessionID]
-	delete(a.sessions, sessionID)
-	a.termMu.Unlock()
-	if h == nil || h.term == nil {
+	if h == nil {
+		a.termMu.Unlock()
 		return nil
 	}
-	return h.term.Close()
+	a.termMu.Unlock()
+	var err error
+	h.finalize.Do(func() {
+		a.termMu.Lock()
+		delete(a.sessions, sessionID)
+		a.termMu.Unlock()
+		if h.term != nil {
+			err = h.term.Close()
+		}
+		if h.sftp != nil {
+			_ = h.sftp.Close()
+		}
+	})
+	return err
 }
 
 func decodeRemote(b []byte) string {

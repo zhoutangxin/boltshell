@@ -2,9 +2,9 @@ module ssh-go
 
 go 1.25.0
 
-require golang.org/x/crypto v0.53.0
+require golang.org/x/crypto v0.54.0
 
-require golang.org/x/term v0.44.0
+require golang.org/x/term v0.45.0
 
 require (
 	gioui.org/shader v1.0.8 // indirect
@@ -18,6 +18,7 @@ require (
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/jchv/go-winloader v0.0.0-20210711035445-715c2860da7e // indirect
+	github.com/kr/fs v0.1.0 // indirect
 	github.com/labstack/echo/v4 v4.13.3 // indirect
 	github.com/labstack/gommon v0.4.2 // indirect
 	github.com/leaanthony/go-ansi-parser v1.6.1 // indirect
@@ -40,7 +41,7 @@ require (
 	golang.org/x/exp/shiny v0.0.0-20250408133849-7e4ce0ab07d0 // indirect
 	golang.org/x/image v0.41.0 // indirect
 	golang.org/x/net v0.56.0 // indirect
-	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect
 	modernc.org/libc v1.49.3 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
@@ -52,7 +53,8 @@ require (
 require (
 	gioui.org v0.9.0
 	github.com/atotto/clipboard v0.1.4
+	github.com/pkg/sftp v1.13.11
 	github.com/wailsapp/wails/v2 v2.15.0
-	golang.org/x/text v0.39.0
+	golang.org/x/text v0.40.0
 	modernc.org/sqlite v1.29.10
 )
