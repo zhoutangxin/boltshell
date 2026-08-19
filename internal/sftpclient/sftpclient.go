@@ -68,6 +68,50 @@ func joinRemote(dir, name string) string {
 	return path.Clean(dir + "/" + name)
 }
 
+const maxEditSize = 2 * 1024 * 1024 // 2MB
+
+// ReadFile 读取远端文件全部内容（限制大小，适用于在线编辑）
+func (c *Client) ReadFile(remotePath string) ([]byte, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("sftp not ready")
+	}
+	p := cleanRemotePath(remotePath)
+	info, err := c.client.Stat(p)
+	if err != nil {
+		return nil, fmt.Errorf("无法访问文件: %w", err)
+	}
+	if info.IsDir() {
+		return nil, fmt.Errorf("目标是目录，无法编辑")
+	}
+	if info.Size() > maxEditSize {
+		return nil, fmt.Errorf("文件过大（%d 字节，上限 2MB），请下载后编辑", info.Size())
+	}
+	f, err := c.client.Open(p)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
+}
+
+// WriteFile 将内容写入远端文件
+func (c *Client) WriteFile(remotePath string, data []byte) error {
+	if c == nil || c.client == nil {
+		return fmt.Errorf("sftp not ready")
+	}
+	p := cleanRemotePath(remotePath)
+	f, err := c.client.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
+	if err != nil {
+		return wrapTransferErr("写入", p, err)
+	}
+	defer f.Close()
+	_, err = f.Write(data)
+	if err != nil {
+		return wrapTransferErr("写入", p, err)
+	}
+	return nil
+}
+
 // HomeDir 获取远端用户 home 目录
 func (c *Client) HomeDir() (string, error) {
 	wd, err := c.client.Getwd()

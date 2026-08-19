@@ -1,0 +1,18 @@
+{
+  "appName":  "ShellLite",
+  "logLevel": "INFO",
+  "port":     22,
+  "host":     "",
+  "user":     "",
+  "password": "",
+  "dbPath":   "",
+
+  "_说明_appName":  "应用名称，日志中显示，默认 ShellLite",
+  "_说明_logLevel": "日志级别：DEBUG / INFO / WARN / ERROR，默认 INFO",
+  "_说明_port":     "SSH 端口，默认 22",
+  "_说明_host":     "SSH 服务器地址，留空则启动后从界面选择",
+  "_说明_user":     "SSH 用户名，留空则从界面输入",
+  "_说明_password": "SSH 密码，留空则从界面输入",
+  "_说明_dbPath":   "SQLite 数据库路径，留空则默认 exe 同目录的 data.db",
+  "_说明_使用方式": "复制本文件为 config.json，填入实际值，放在 exe 同目录或项目根目录。config.json 已被 .gitignore 忽略，不会提交到仓库"
+}

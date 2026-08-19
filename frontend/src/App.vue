@@ -23,6 +23,8 @@ import {
   StartSession,
   UpdateConnection,
   UploadToRemote,
+  ReadRemoteFile,
+  WriteRemoteFile,
 } from '../wailsjs/go/main/App.js'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
@@ -104,6 +106,60 @@ const DOWNLOAD_DIR_KEY = 'shelllite-download-dir'
 const downloadDir = ref(localStorage.getItem(DOWNLOAD_DIR_KEY) || '')
 const transferTasks = reactive<TransferTask[]>([])
 const transferPanelOpen = ref(false)
+
+const editor = reactive({
+  open: false,
+  path: '',
+  content: '',
+  original: '',
+  saving: false,
+  loading: false,
+  error: '',
+})
+
+async function openFileEditor(remotePath: string) {
+  const sid = activeSessionID.value
+  if (!sid) return
+  editor.path = remotePath
+  editor.content = ''
+  editor.original = ''
+  editor.error = ''
+  editor.saving = false
+  editor.loading = true
+  editor.open = true
+  try {
+    const text = await ReadRemoteFile(sid, remotePath)
+    editor.content = text
+    editor.original = text
+  } catch (e: any) {
+    editor.error = e?.message || String(e)
+  } finally {
+    editor.loading = false
+  }
+}
+
+async function saveFileEditor() {
+  const sid = activeSessionID.value
+  if (!sid || editor.saving) return
+  editor.saving = true
+  editor.error = ''
+  try {
+    await WriteRemoteFile(sid, editor.path, editor.content)
+    editor.original = editor.content
+    editor.open = false
+  } catch (e: any) {
+    editor.error = e?.message || String(e)
+  } finally {
+    editor.saving = false
+  }
+}
+
+function closeFileEditor() {
+  if (editor.content !== editor.original) {
+    if (!confirm('文件已修改但未保存，确定关闭？')) return
+  }
+  editor.open = false
+}
 
 function saveDownloadDir(dir: string) {
   downloadDir.value = dir
@@ -569,6 +625,17 @@ async function navigateRemote(target: string) {
   await refreshRemoteFiles(sid)
 }
 
+async function onPathBarBlur(e: FocusEvent) {
+  const input = e.target as HTMLInputElement
+  const val = input.value.trim()
+  if (!val || !activeFileState.value) return
+  const target = val.startsWith('/') ? val : `/${val}`
+  if (target !== activeFileState.value.path) {
+    await navigateRemote(target)
+  }
+  input.value = activeFileState.value.path || '/'
+}
+
 async function openRemoteEntry(name: string) {
   const st = activeFileState.value
   if (!st || !activeSessionID.value) return
@@ -581,6 +648,8 @@ async function openRemoteEntry(name: string) {
     st.path = entry.Path
     st.selected = ''
     await refreshRemoteFiles(activeSessionID.value)
+  } else if (entry) {
+    await openFileEditor(entry.Path)
   }
 }
 
@@ -1371,8 +1440,15 @@ watch(activeSessionID, () => {
               <button class="ft-btn" type="button" :disabled="!activeFileState.selected" @click="remoteRename">✏ 重命名</button>
               <span class="ft-sep" />
               <span class="ft-tag">SFTP</span>
-              <div class="path-bar" :title="activeFileState.path || '/'">
-                <span class="path-display">{{ activeFileState.path || '/' }}</span>
+              <div class="path-bar">
+                <input
+                  class="path-input"
+                  :value="activeFileState.path || '/'"
+                  @keydown.enter="($event.target as HTMLInputElement).blur()"
+                  @blur="onPathBarBlur($event)"
+                  @focus="($event.target as HTMLInputElement).select()"
+                  spellcheck="false"
+                />
               </div>
             </div>
             <div class="file-body">
@@ -1424,6 +1500,33 @@ watch(activeSessionID, () => {
               <span>协议: SFTP（与 SSH 同连接）</span>
               <span>{{ activeFileState.status || '就绪' }}</span>
             </div>
+
+            <!-- 文件编辑器弹窗 -->
+            <Teleport to="body">
+              <div v-if="editor.open" class="editor-overlay" @click.self="closeFileEditor">
+                <div class="editor-dialog">
+                  <div class="editor-header">
+                    <span class="editor-title">📝 {{ editor.path }}</span>
+                    <div class="editor-actions">
+                      <span v-if="editor.content !== editor.original" class="editor-modified">● 已修改</span>
+                      <button class="ft-btn primary" :disabled="editor.saving || editor.loading || editor.content === editor.original" @click="saveFileEditor">
+                        {{ editor.saving ? '保存中…' : '💾 保存' }}
+                      </button>
+                      <button class="ft-btn editor-close-btn" @click="closeFileEditor">✕ 关闭</button>
+                    </div>
+                  </div>
+                  <div v-if="editor.error" class="editor-error">{{ editor.error }}</div>
+                  <div v-if="editor.loading" class="editor-loading">加载中…</div>
+                  <textarea
+                    v-else
+                    v-model="editor.content"
+                    class="editor-textarea"
+                    spellcheck="false"
+                    wrap="off"
+                  ></textarea>
+                </div>
+              </div>
+            </Teleport>
           </template>
 
           <div v-else class="cmd-panel active">
@@ -2293,11 +2396,19 @@ df -h</textarea>
   overflow: hidden;
   min-width: 0;
 }
-.path-display {
-  color: var(--ui-text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.path-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #1e293b;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: 28px;
+}
+.path-input:focus {
+  color: #0f172a;
+  background: #fff;
 }
 .path-crumb {
   color: var(--ui-accent);
@@ -2980,4 +3091,91 @@ df -h</textarea>
   color: #fff;
 }
 .btn-primary:hover { background: #1d4ed8; }
+
+.editor-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.editor-dialog {
+  width: 80vw;
+  height: 80vh;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #1e293b;
+  gap: 10px;
+}
+.editor-title {
+  font-weight: 600;
+  font-size: var(--fs-base);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  flex: 1;
+  font-family: var(--font-mono);
+  color: #f1f5f9;
+}
+.editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.editor-modified {
+  color: #fbbf24;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+.editor-close-btn {
+  color: #cbd5e1;
+  border-color: #475569;
+}
+.editor-close-btn:hover {
+  color: #fff;
+  background: #334155;
+}
+.editor-error {
+  padding: 8px 16px;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: var(--fs-sm);
+  border-bottom: 1px solid #fecaca;
+}
+.editor-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ui-text-muted);
+}
+.editor-textarea {
+  flex: 1;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 12px 16px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  tab-size: 4;
+  color: #1e293b;
+  background: #fff;
+  overflow: auto;
+}
 </style>

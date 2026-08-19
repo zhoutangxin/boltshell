@@ -65,6 +65,28 @@ func (a *App) RenameRemote(sessionID string, oldPath string, newPath string) err
 	return c.Rename(oldPath, newPath)
 }
 
+// ReadRemoteFile 读取远端文件内容（用于在线编辑，限 2MB）
+func (a *App) ReadRemoteFile(sessionID string, remotePath string) (string, error) {
+	c, err := a.getSFTP(sessionID)
+	if err != nil {
+		return "", err
+	}
+	data, err := c.ReadFile(remotePath)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// WriteRemoteFile 将内容写回远端文件
+func (a *App) WriteRemoteFile(sessionID string, remotePath string, content string) error {
+	c, err := a.getSFTP(sessionID)
+	if err != nil {
+		return err
+	}
+	return c.WriteFile(remotePath, []byte(content))
+}
+
 // PickLocalFile 选择本机文件（上传用）
 func (a *App) PickLocalFile() (string, error) {
 	return runtime.OpenFileDialog(a.ctx, runtime.OpenDialogOptions{

@@ -54,6 +54,10 @@ export function PickSaveFile(arg1) {
   return window['go']['main']['App']['PickSaveFile'](arg1);
 }
 
+export function ReadRemoteFile(arg1, arg2) {
+  return window['go']['main']['App']['ReadRemoteFile'](arg1, arg2);
+}
+
 export function RemoveRemote(arg1, arg2) {
   return window['go']['main']['App']['RemoveRemote'](arg1, arg2);
 }
@@ -84,4 +88,8 @@ export function UpdateConnection(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8)
 
 export function UploadToRemote(arg1, arg2, arg3) {
   return window['go']['main']['App']['UploadToRemote'](arg1, arg2, arg3);
+}
+
+export function WriteRemoteFile(arg1, arg2, arg3) {
+  return window['go']['main']['App']['WriteRemoteFile'](arg1, arg2, arg3);
 }

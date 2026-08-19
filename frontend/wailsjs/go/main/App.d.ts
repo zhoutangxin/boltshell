@@ -30,6 +30,8 @@ export function PickLocalFile():Promise<string>;
 
 export function PickSaveFile(arg1:string):Promise<string>;
 
+export function ReadRemoteFile(arg1:string,arg2:string):Promise<string>;
+
 export function RemoveRemote(arg1:string,arg2:string):Promise<void>;
 
 export function RenameRemote(arg1:string,arg2:string,arg3:string):Promise<void>;
@@ -45,3 +47,5 @@ export function StartSession(arg1:string):Promise<string>;
 export function UpdateConnection(arg1:string,arg2:string,arg3:string,arg4:number,arg5:string,arg6:string,arg7:string,arg8:boolean):Promise<void>;
 
 export function UploadToRemote(arg1:string,arg2:string,arg3:string):Promise<void>;
+
+export function WriteRemoteFile(arg1:string,arg2:string,arg3:string):Promise<void>;
