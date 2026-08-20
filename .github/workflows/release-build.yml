@@ -76,13 +76,22 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: frontend
+        shell: bash
         env:
           NODE_ENV: development
-        run: npm ci --no-audit --no-fund
+          NPM_CONFIG_PRODUCTION: "false"
+        run: |
+          npm ci --include=dev --no-audit --no-fund
+          if [ ! -f node_modules/vite/bin/vite.js ]; then
+            echo "vite missing after npm ci, retry with npm install"
+            npm install --include=dev --no-audit --no-fund
+          fi
+          test -f node_modules/vite/bin/vite.js
 
       - name: Build frontend
         working-directory: frontend
-        run: npm run build:release
+        shell: bash
+        run: node ./node_modules/vite/bin/vite.js build
 
       - name: Build macOS app
         run: |
@@ -145,13 +154,22 @@ jobs:
 
       - name: Install frontend dependencies
         working-directory: frontend
+        shell: bash
         env:
           NODE_ENV: development
-        run: npm ci --no-audit --no-fund
+          NPM_CONFIG_PRODUCTION: "false"
+        run: |
+          npm ci --include=dev --no-audit --no-fund
+          if [ ! -f node_modules/vite/bin/vite.js ]; then
+            echo "vite missing after npm ci, retry with npm install"
+            npm install --include=dev --no-audit --no-fund
+          fi
+          test -f node_modules/vite/bin/vite.js
 
       - name: Build frontend
         working-directory: frontend
-        run: npm run build:release
+        shell: bash
+        run: node ./node_modules/vite/bin/vite.js build
 
       - name: Build Windows exe
         shell: bash
