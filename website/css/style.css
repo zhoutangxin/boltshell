@@ -265,6 +265,53 @@ a:hover { color: var(--blue-dark); }
   margin-bottom: 24px;
 }
 
+.download-actions--footer { margin: 24px 0 0; }
+
+.dl-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-bottom: 40px;
+}
+
+.dl-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 20px;
+}
+
+.dl-icon {
+  font-size: 2rem;
+  line-height: 1;
+  margin-bottom: 12px;
+}
+
+.dl-card h3 {
+  font-size: 1.1rem;
+  margin-bottom: 4px;
+}
+
+.dl-meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-bottom: 16px;
+}
+
+.dl-note {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 12px;
+}
+
+.dl-snippet-title {
+  font-size: 1rem;
+  margin-bottom: 12px;
+}
+
 .install-snippet {
   text-align: left;
   background: #1e1e2e;

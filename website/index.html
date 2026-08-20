@@ -33,10 +33,10 @@
           <h1>Bolt into your server.</h1>
           <p class="subtitle">闪电连接，一键运维。终端、SFTP、系统监控，一个窗口全搞定。</p>
           <div class="hero-actions">
-            <a class="btn btn-primary" href="#download">下载 Windows 版</a>
+            <a class="btn btn-primary" href="#download">免费下载</a>
             <a class="btn btn-ghost" href="https://gitee.com/zhoutangxin/boltshell" target="_blank" rel="noopener">查看源码</a>
           </div>
-          <p class="hero-note">🚧 开发中 · v0.1 即将发布</p>
+          <p class="hero-note">v1.0.2 已发布 · Windows / macOS / Linux</p>
         </div>
         <div class="hero-visual">
           <div class="mock-window">
@@ -86,16 +86,46 @@
     <section id="download" class="section download">
       <div class="container download-box">
         <h2>下载 BoltShell</h2>
-        <p>Windows 10/11（需 WebView2，系统通常已自带）</p>
-        <div class="download-actions">
-          <a class="btn btn-primary btn-lg" href="#" aria-disabled="true">Windows x64（即将发布）</a>
-          <a class="btn btn-ghost" href="https://gitee.com/zhoutangxin/boltshell/releases" target="_blank" rel="noopener">Release 页面</a>
-        </div>
-        <pre class="install-snippet"><code># 一行安装（规划中）
-curl -fsSL https://boltshell.com/install.sh | sh
+        <p>当前版本 <strong>v1.0.2</strong> · 免费开源 · 支持 Windows / macOS / Linux</p>
 
-# Scoop（规划中）
-scoop install boltshell</code></pre>
+        <div class="dl-grid">
+          <article class="dl-card">
+            <span class="dl-icon">🪟</span>
+            <h3>Windows</h3>
+            <p class="dl-meta">x64 · 免安装 exe</p>
+            <a class="btn btn-primary" href="https://github.com/zhoutangxin/boltshell/releases/download/v1.0.2/BoltShell.exe">下载 .exe</a>
+            <p class="dl-note">Windows 10/11，需 WebView2（系统通常已自带）</p>
+          </article>
+
+          <article class="dl-card">
+            <span class="dl-icon">🍎</span>
+            <h3>macOS</h3>
+            <p class="dl-meta">Universal · Intel + Apple Silicon</p>
+            <a class="btn btn-primary" href="https://github.com/zhoutangxin/boltshell/releases/download/v1.0.2/BoltShell-macOS-universal.zip">下载 .zip</a>
+            <p class="dl-note">未签名，首次打开请右键「打开」或在「隐私与安全性」中放行</p>
+          </article>
+
+          <article class="dl-card">
+            <span class="dl-icon">🐧</span>
+            <h3>Linux</h3>
+            <p class="dl-meta">x86_64 · tar.gz</p>
+            <a class="btn btn-primary" href="https://github.com/zhoutangxin/boltshell/releases/download/v1.0.2/BoltShell-linux-amd64.tar.gz">下载 .tar.gz</a>
+            <p class="dl-note">Ubuntu 22.04+ / Debian 12+，需 WebKitGTK 4.1</p>
+          </article>
+        </div>
+
+        <h3 class="dl-snippet-title">Linux 安装步骤</h3>
+        <pre class="install-snippet"><code># 1. 安装运行依赖（Ubuntu / Debian）
+sudo apt-get install -y libgtk-3-0 libwebkit2gtk-4.1-0
+
+# 2. 解压并运行
+tar -xzf BoltShell-linux-amd64.tar.gz
+chmod +x BoltShell &amp;&amp; ./BoltShell</code></pre>
+
+        <div class="download-actions download-actions--footer">
+          <a class="btn btn-ghost" href="https://github.com/zhoutangxin/boltshell/releases" target="_blank" rel="noopener">全部版本</a>
+          <a class="btn btn-ghost" href="https://gitee.com/zhoutangxin/boltshell" target="_blank" rel="noopener">Gitee 镜像</a>
+        </div>
       </div>
     </section>
 

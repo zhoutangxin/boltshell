@@ -115,6 +115,8 @@ curl https://boltshell.com/config/sponsors.json
 ## 待办
 
 - [ ] 购买域名并绑定
-- [ ] Release 下载链接指向 Gitee/GitHub Releases
+- [x] Release 下载链接指向 GitHub Releases（Windows / macOS / Linux 三平台）
 - [ ] Pro 购买页 / 支付接入
 - [ ] install.sh 安装脚本
+
+> 发新版后需同步更新 `index.html` 下载区的版本号与三个 Release 资源链接。
