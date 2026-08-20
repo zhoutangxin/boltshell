@@ -76,9 +76,13 @@ jobs:
             echo "suffix=${platform#darwin/}" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Install and build frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+
       - name: Build macOS app
         run: |
-          wails build -platform "${{ steps.mac.outputs.platform }}" \
+          wails build -s -platform "${{ steps.mac.outputs.platform }}" \
             -ldflags "-X boltshell/internal/version.Version=${{ steps.ver.outputs.version }}"
 
       - name: Verify app bundle
@@ -137,10 +141,14 @@ jobs:
             echo "version=${ver}" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Install and build frontend
+        working-directory: frontend
+        run: npm ci && npm run build
+
       - name: Build Windows exe
         shell: bash
         run: |
-          wails build -ldflags "-X boltshell/internal/version.Version=${{ steps.ver.outputs.version }}"
+          wails build -s -ldflags "-X boltshell/internal/version.Version=${{ steps.ver.outputs.version }}"
 
       - name: Verify exe size
         shell: pwsh
