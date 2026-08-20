@@ -14,6 +14,8 @@ node_modules/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+# Wails 根据 package.json 字节自动生成，换行一变 MD5 就变，不必入库
+frontend/package.json.md5
 
 # IDE
 .idea/
