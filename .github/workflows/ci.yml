@@ -28,7 +28,7 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         run: |
-          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
           test -f node_modules/vue-tsc/bin/vue-tsc.js
 
       - name: Typecheck frontend

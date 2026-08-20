@@ -80,9 +80,7 @@ jobs:
         working-directory: frontend
         shell: bash
         run: |
-          set -euo pipefail
-          rm -rf node_modules
-          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
           test -f node_modules/vite/bin/vite.js
 
       - name: Build frontend
@@ -155,9 +153,7 @@ jobs:
         working-directory: frontend
         shell: bash
         run: |
-          set -euo pipefail
-          rm -rf node_modules
-          npm install --no-audit --no-fund
+          npm ci --no-audit --no-fund
           test -f node_modules/vite/bin/vite.js
 
       - name: Build frontend
