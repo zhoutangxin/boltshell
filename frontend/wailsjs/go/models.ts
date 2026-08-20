@@ -216,3 +216,34 @@ export namespace sftpclient {
 
 }
 
+export namespace updater {
+	
+	export class CheckResult {
+	    CurrentVersion: string;
+	    LatestVersion: string;
+	    HasUpdate: boolean;
+	    ReleaseNotes: string;
+	    DownloadURL: string;
+	    Mandatory: boolean;
+	    PublishedAt: string;
+	    CheckError?: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CheckResult(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.CurrentVersion = source["CurrentVersion"];
+	        this.LatestVersion = source["LatestVersion"];
+	        this.HasUpdate = source["HasUpdate"];
+	        this.ReleaseNotes = source["ReleaseNotes"];
+	        this.DownloadURL = source["DownloadURL"];
+	        this.Mandatory = source["Mandatory"];
+	        this.PublishedAt = source["PublishedAt"];
+	        this.CheckError = source["CheckError"];
+	    }
+	}
+
+}
+

@@ -35,6 +35,12 @@
   flex-direction: column;
   align-items: stretch;
   flex-shrink: 0;
+  height: 100vh;
+  box-sizing: border-box;
+}
+.left-rail-spacer {
+  flex: 1;
+  min-height: 0;
 }
 .btn-conn-mgr {
   width: 40px;
@@ -44,9 +50,88 @@
   cursor: pointer;
   font-size: 18px;
   color: #475569;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding: 0;
+  margin: 0;
 }
 .btn-conn-mgr:hover { background: #d4dde8; }
 .btn-conn-mgr.active { background: #c5d5e8; }
+
+.btn-upgrade {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  width: 40px;
+  min-height: 48px;
+  padding: 4px 0 6px;
+  margin: 0;
+  box-sizing: border-box;
+  border: none;
+  border-top: 1px solid var(--ui-border);
+  background: #e8eef4;
+  color: #475569;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-upgrade:hover {
+  background: #dce6f0;
+  color: #1e293b;
+}
+.btn-upgrade .upgrade-icon {
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 700;
+}
+.btn-upgrade .upgrade-label {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+.btn-upgrade.has-update {
+  background: linear-gradient(180deg, #fb923c 0%, #f97316 100%);
+  color: #fff;
+  border-top-color: #ea580c;
+  animation: upgrade-pulse 2s ease-in-out infinite;
+}
+.btn-upgrade.has-update:hover {
+  background: linear-gradient(180deg, #fdba74 0%, #fb923c 100%);
+  color: #fff;
+}
+.btn-upgrade .upgrade-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 2px;
+  border-radius: 7px;
+  background: #dc2626;
+  color: #fff;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 13px;
+  text-align: center;
+}
+.btn-upgrade .upgrade-ver {
+  font-size: 8px;
+  font-weight: 600;
+  line-height: 1;
+  opacity: 0.95;
+}
+.btn-upgrade.upgrading {
+  opacity: 0.65;
+  cursor: wait;
+  animation: none;
+}
+@keyframes upgrade-pulse {
+  0%, 100% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2); }
+  50% { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 0 0 2px rgba(249, 115, 22, 0.25); }
+}
 
 .workspace {
   flex: 1;
@@ -935,10 +1020,10 @@
   inset: 0;
   overflow: hidden;
 }
-.terminal-host :deep(.xterm) {
+.terminal-host .xterm {
   height: 100%;
 }
-.terminal-host :deep(.xterm-viewport) {
+.terminal-host .xterm-viewport {
   overflow-y: auto;
 }
 

@@ -1,0 +1,8 @@
+{
+  "version": "1.0.1",
+  "buildNumber": 2,
+  "releaseNotes": "BoltShell 新版本：性能优化与 bug 修复",
+  "downloadURL": "http://47.108.138.168/releases/BoltShell-1.0.1.exe",
+  "mandatory": false,
+  "publishedAt": "2026-08-20"
+}

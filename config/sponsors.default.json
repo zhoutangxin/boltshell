@@ -2,7 +2,7 @@
   "version": 1,
   "updatedAt": "2026-08-20",
   "cacheTTLSeconds": 21600,
-  "proUpgradeUrl": "https://boltshell.com/pro",
+  "proUpgradeUrl": "http://47.108.138.168/pro",
   "slots": {
     "quick_connect_bottom": {
       "enabled": true,
@@ -28,7 +28,7 @@
       "badge": "Pro",
       "title": "升级 Pro，永久去广告",
       "desc": "无限连接 · 更多效率工具 →",
-      "linkUrl": "https://boltshell.com/pro",
+      "linkUrl": "http://47.108.138.168/pro",
       "dismissDays": 7
     }
   }

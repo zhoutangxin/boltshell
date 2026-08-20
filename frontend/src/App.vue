@@ -10,10 +10,11 @@
  * 业务逻辑已下沉至 composables/，UI 已拆分至 components/
  */
 import { nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
-import { EventsOff, EventsOnMultiple } from '../wailsjs/runtime/runtime'
+import { subscribeBackendEvents } from './composables/useBackendEvents'
 import { ReadRemoteFile, WriteRemoteFile } from '../wailsjs/go/main/App.js'
 
 import LeftRail from './components/layout/LeftRail.vue'
+import UpdatePromptModal from './components/updater/UpdatePromptModal.vue'
 import SysInfoPanel from './components/sysinfo/SysInfoPanel.vue'
 import SessionTabBar from './components/session/SessionTabBar.vue'
 import QuickConnectPanel from './components/session/QuickConnectPanel.vue'
@@ -26,10 +27,11 @@ import ConnectionFormModal from './components/connection/ConnectionFormModal.vue
 import { useConnections } from './composables/useConnections'
 import { useSysInfo } from './composables/useSysInfo'
 import { useTransferTasks } from './composables/useTransferTasks'
-import { useTerminal, parseEventArgs } from './composables/useTerminal'
+import { useTerminal } from './composables/useTerminal'
 import { useFilePane } from './composables/useFilePane'
 import { useServerTransfer } from './composables/useServerTransfer'
 import { useSponsors } from './composables/useSponsors'
+import { useUpdater } from './composables/useUpdater'
 import type { Connection } from './types'
 
 // —— 连接 & 会话（解构 ref 供模板自动解包）——
@@ -96,6 +98,20 @@ const {
 // —— 赞助位（远程配置）——
 const sponsorApi = useSponsors()
 const { quickSlot, sidebarSlots, dismiss: dismissSponsor, config: sponsorConfig } = sponsorApi
+
+// —— 版本升级 ——
+const updaterApi = useUpdater()
+const {
+  currentVersion,
+  updateInfo,
+  upgrading,
+  upgradeStatus,
+  showUpdatePrompt,
+  upgrade: applyUpgrade,
+  upgradeFromPrompt,
+  dismissUpdatePrompt,
+  hasUpdate,
+} = updaterApi
 
 // —— xterm 终端 ——
 const termApi = useTerminal(activeSessionID, sessions, isTypingInForm)
@@ -257,28 +273,16 @@ function startSplitDrag(e: MouseEvent) {
   document.addEventListener('mouseup', onUp)
 }
 
+let unsubscribeBackendEvents: (() => void) | null = null
+
 onMounted(async () => {
-  // maxCallbacks=1 防止 HMR 热更新重复订阅导致输出翻倍
-  EventsOff('terminal-output', 'terminal-closed', 'transfer-update', 'transfer-log', 'srv-transfer-progress')
-  EventsOnMultiple('terminal-output', (...args: unknown[]) => {
-    const [sessionID, data] = parseEventArgs(args)
-    if (sessionID) writeToTerminal(sessionID, data)
-  }, 1)
-  EventsOnMultiple('terminal-closed', (...args: unknown[]) => {
-    const [sessionID] = parseEventArgs(args)
-    if (sessionID) markSessionClosed(sessionID)
-  }, 1)
-  EventsOnMultiple('transfer-update', (...args: unknown[]) => {
-    const ev = args[0]
-    if (ev && typeof ev === 'object') upsertTransfer(ev as Record<string, unknown>)
-  }, 1)
-  EventsOnMultiple('transfer-log', (...args: unknown[]) => {
-    if (typeof args[0] === 'string') appendLog(args[0])
-  }, 1)
-  EventsOnMultiple('srv-transfer-progress', (...args: unknown[]) => {
-    const ev = args[0] as { TaskID?: string; Total?: number; Transferred?: number }
-    if (ev?.TaskID) updateTaskProgress(ev.TaskID, Number(ev.Total ?? 0), Number(ev.Transferred ?? 0))
-  }, 1)
+  unsubscribeBackendEvents = subscribeBackendEvents({
+    onTerminalOutput: writeToTerminal,
+    onTerminalClosed: markSessionClosed,
+    onTransferUpdate: upsertTransfer,
+    onTransferLog: appendLog,
+    onServerTransferProgress: updateTaskProgress,
+  })
 
   await refreshList()
   loadRecents()
@@ -292,7 +296,8 @@ onMounted(async () => {
 
 onUnmounted(() => {
   stopSysInfoPoll()
-  EventsOff('terminal-output', 'terminal-closed', 'transfer-update', 'transfer-log', 'srv-transfer-progress')
+  unsubscribeBackendEvents?.()
+  unsubscribeBackendEvents = null
 })
 
 watch(activeSessionID, () => {
@@ -305,7 +310,16 @@ watch(activeSessionID, () => {
 
 <template>
   <div class="app">
-    <LeftRail :mgr-open="state.showMgr" @open-mgr="openMgr" />
+    <LeftRail
+      :mgr-open="state.showMgr"
+      :has-update="hasUpdate()"
+      :current-version="currentVersion"
+      :latest-version="updateInfo?.LatestVersion"
+      :upgrading="upgrading"
+      :upgrade-status="upgradeStatus"
+      @open-mgr="openMgr"
+      @upgrade="applyUpgrade"
+    />
 
     <SysInfoPanel
       v-if="sessions.length > 0 && !ui.sysCollapsed"
@@ -348,13 +362,13 @@ watch(activeSessionID, () => {
             @clear-recents="clearRecents"
             @dismiss-sponsor="(id, days) => dismissSponsor(id, days)"
           />
-          <template v-for="s in sessions" :key="s.sessionID">
-            <div
-              v-if="activeSessionID === s.sessionID"
-              :ref="(el) => setTerminalHost(s.sessionID, el)"
-              class="terminal-host"
-            />
-          </template>
+          <div
+            v-for="s in sessions"
+            :key="s.sessionID"
+            :ref="(el) => setTerminalHost(s.sessionID, el)"
+            class="terminal-host"
+            v-show="activeSessionID === s.sessionID"
+          />
         </div>
 
         <FilePane
@@ -463,6 +477,15 @@ watch(activeSessionID, () => {
       @pick-group="pickGroup"
       @save="onSaveConnection"
       @close="closeAddModal"
+    />
+
+    <UpdatePromptModal
+      :open="showUpdatePrompt"
+      :info="updateInfo"
+      :upgrading="upgrading"
+      :upgrade-status="upgradeStatus"
+      @close="dismissUpdatePrompt"
+      @upgrade="upgradeFromPrompt"
     />
   </div>
 </template>

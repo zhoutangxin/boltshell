@@ -19,8 +19,6 @@ import (
 //go:embed default.json
 var embeddedDefault []byte
 
-const defaultRemoteURL = "https://boltshell.com/config/sponsors.json"
-
 // Slot 单个赞助位配置
 type Slot struct {
 	Enabled     bool   `json:"enabled"`
@@ -33,7 +31,7 @@ type Slot struct {
 	DismissDays int    `json:"dismissDays,omitempty"`
 }
 
-// Config 远程/本地赞助配置
+// Config 赞助位配置（远程 / 本地 fallback / 内置默认）
 type Config struct {
 	Version         int              `json:"version"`
 	UpdatedAt       string           `json:"updatedAt"`
@@ -64,12 +62,8 @@ type Options struct {
 
 // NewClient 创建赞助配置客户端
 func NewClient(opt Options) *Client {
-	url := strings.TrimSpace(opt.RemoteURL)
-	if url == "" {
-		url = defaultRemoteURL
-	}
 	return &Client{
-		remoteURL: url,
+		remoteURL: strings.TrimSpace(opt.RemoteURL),
 		localPath: strings.TrimSpace(opt.LocalPath),
 		cachePath: strings.TrimSpace(opt.CachePath),
 		httpClient: &http.Client{Timeout: 8 * time.Second},
@@ -95,9 +89,11 @@ func (c *Client) Load(forceRefresh bool) (Config, error) {
 		return c.cached, nil
 	}
 
-	if cfg, err := c.fetchRemote(); err == nil {
-		c.storeCache(cfg)
-		return cfg, nil
+	if c.remoteURL != "" {
+		if cfg, err := c.fetchRemote(); err == nil {
+			c.storeCache(cfg)
+			return cfg, nil
+		}
 	}
 
 	if c.localPath != "" {
@@ -215,9 +211,6 @@ func saveDiskCache(path string, cfg Config) error {
 func normalizeConfig(c *Config) {
 	if c.CacheTTLSeconds <= 0 {
 		c.CacheTTLSeconds = 21600
-	}
-	if c.ProUpgradeURL == "" {
-		c.ProUpgradeURL = "https://boltshell.com/pro"
 	}
 	if c.Slots == nil {
 		c.Slots = map[string]Slot{}

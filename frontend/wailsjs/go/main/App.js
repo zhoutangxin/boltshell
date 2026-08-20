@@ -6,8 +6,16 @@ export function AddConnection(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['main']['App']['AddConnection'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
+export function ApplyUpdate(arg1) {
+  return window['go']['main']['App']['ApplyUpdate'](arg1);
+}
+
 export function BrowseConnectionDir(arg1, arg2) {
   return window['go']['main']['App']['BrowseConnectionDir'](arg1, arg2);
+}
+
+export function CheckForUpdate() {
+  return window['go']['main']['App']['CheckForUpdate']();
 }
 
 export function CloseSession(arg1) {
@@ -20,6 +28,10 @@ export function DismissSponsorSlot(arg1, arg2) {
 
 export function DownloadFromRemote(arg1, arg2, arg3) {
   return window['go']['main']['App']['DownloadFromRemote'](arg1, arg2, arg3);
+}
+
+export function GetAppVersion() {
+  return window['go']['main']['App']['GetAppVersion']();
 }
 
 export function GetConnectionHome(arg1) {

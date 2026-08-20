@@ -338,18 +338,21 @@ BoltShell 客户端只有 **两种界面态**，广告位 **互斥显示**（不
 - **开发调试：** 设置 `BOLTSHELL_DEV=1` 后可使用 `BOLTSHELL_PRO=1` 或 `config.json` 的 `proLicensed`（正式包忽略该字段）
 - **免费用户点 ×：** 该 slot 隐藏 **7 天**；状态写入用户目录 `sponsor.state`（HMAC 签名，手改无效；删文件则恢复展示）
 - **连接成功后：** 快速连接页赞助位自动消失，仅显示侧栏 2 条
-- **默认 sponsors.json：** 仅远程不可用时的 fallback，不是「关闭开关」
-- **配置下发：** `https://boltshell.com/config/sponsors.json`（6h 客户端缓存）
+- **默认 sponsors.json：** 远程不可用时的 fallback，不是「关闭开关」
+- **配置下发：** `config/sponsors.remote.json`（开发者配置 remoteURL，支持 IP）；6h 客户端缓存
 
 ### 6.5.6 配置与官网
 
 | 资产 | 路径 |
 |------|------|
+| 客户端远程 URL | `config/sponsors.remote.json`（开发者配置，随包分发） |
 | 客户端本地 fallback | `config/sponsors.default.json` |
 | 官网静态配置 | `website/config/sponsors.json` |
 | 官网单页骨架 | `website/index.html` |
+| Nginx 部署说明 | `website/README.md` |
+| **配置文件读取路径（技术细节）** | [BoltShell_赞助位配置说明.md](docs/BoltShell_赞助位配置说明.md) |
 
-无后台阶段：编辑 JSON → 部署官网 → 客户端下次拉取生效。
+无后台阶段：编辑 `config/sponsors.remote.json` + 服务器 `sponsors.json` → 打包 / 部署 → 客户端拉取生效。
 
 ---
 

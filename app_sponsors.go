@@ -59,7 +59,7 @@ func (a *App) GetSponsorConfig(forceRefresh bool) (SponsorConfigView, error) {
 		Version:         cfg.Version,
 		UpdatedAt:       cfg.UpdatedAt,
 		CacheTTLSeconds: cfg.CacheTTLSeconds,
-		ProUpgradeURL:   cfg.ProUpgradeURL,
+		ProUpgradeURL:   firstNonEmpty(cfg.ProUpgradeURL, a.remoteConfig.ProUpgradeURL),
 		IsPro:           a.isProLicensed(),
 		DismissedUntil:  dismissed,
 		Slots:           []SponsorSlotView{},
@@ -109,7 +109,7 @@ func (a *App) DismissSponsorSlot(slotID string, days int) error {
 	return a.sponsorDismiss.Dismiss(slotID, days)
 }
 
-// RefreshSponsorConfig 强制刷新远程配置
+// RefreshSponsorConfig 强制刷新远程配置（跳过内存缓存）
 func (a *App) RefreshSponsorConfig() (SponsorConfigView, error) {
 	return a.GetSponsorConfig(true)
 }
@@ -128,6 +128,15 @@ func resolveSponsorLocalPath(exeDir string) string {
 	} {
 		if _, err := os.Stat(p); err == nil {
 			return p
+		}
+	}
+	return ""
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
 		}
 	}
 	return ""

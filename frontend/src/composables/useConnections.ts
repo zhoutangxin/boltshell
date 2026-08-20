@@ -395,7 +395,9 @@ export function useConnections() {
     const idx = sessions.findIndex((s) => s.sessionID === sessionID)
     if (idx >= 0) sessions.splice(idx, 1)
     if (activeSessionID.value === sessionID) {
-      activeSessionID.value = sessions.length ? sessions[sessions.length - 1].sessionID : ''
+      // 关掉当前 Tab 后激活相邻的那个（右边优先），而不是永远跳到最后一个
+      const next = sessions[idx] ?? sessions[idx - 1]
+      activeSessionID.value = next ? next.sessionID : ''
       if (activeSessionID.value) {
         await nextTick()
         onSwitchTerminal()

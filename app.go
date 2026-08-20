@@ -16,7 +16,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sync"
 	"time"
 	"unicode/utf8"
@@ -29,6 +28,7 @@ import (
 	"boltshell/internal/sftpclient"
 	"boltshell/internal/sponsors"
 	"boltshell/internal/sshclient"
+	"boltshell/internal/updater"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -46,12 +46,14 @@ type App struct {
 	browsePool map[string]*browsePoolEntry
 
 	// 赞助位 / License 状态存用户目录，不跟 exe 放一起
-	userDataDir            string
-	sponsorRemoteURL   string
-	sponsorLocalPath   string
-	sponsorClient      *sponsors.Client
-	sponsorDismiss     *sponsors.DismissStore
-	proLicensedDev     bool
+	userDataDir      string
+	remoteConfig     sponsors.RemoteConfig
+	sponsorRemoteURL string
+	sponsorLocalPath string
+	sponsorClient    *sponsors.Client
+	sponsorDismiss   *sponsors.DismissStore
+	updaterClient    *updater.Client
+	proLicensedDev   bool
 }
 
 func NewApp() *App {
@@ -125,8 +127,10 @@ func (a *App) initBackend() error {
 	} else {
 		a.userDataDir = exeDir
 	}
-	a.sponsorRemoteURL = cfg.SponsorConfigURL
+	a.remoteConfig = sponsors.LoadRemoteConfig(sponsors.RemoteConfigSearchPaths(exeDir)...)
+	a.sponsorRemoteURL = a.remoteConfig.RemoteURL
 	a.sponsorLocalPath = resolveSponsorLocalPath(exeDir)
+	a.updaterClient = updater.NewClient(a.remoteConfig.ReleaseURL)
 	a.proLicensedDev = cfg.ProLicensed
 
 	a.logger.Info("BoltShell (wails) backend init ok")
@@ -288,6 +292,14 @@ func (a *App) StartSession(connID string) (string, error) {
 	return sid, nil
 }
 
+// emitEvent 向前端推送事件；ctx 未就绪（启动早期 / 单元测试）时静默跳过。
+func (a *App) emitEvent(name string, data ...interface{}) {
+	if a.ctx == nil {
+		return
+	}
+	runtime.EventsEmit(a.ctx, name, data...)
+}
+
 func (a *App) finalizeSession(sessionID string) {
 	a.termMu.Lock()
 	h := a.sessions[sessionID]
@@ -307,7 +319,7 @@ func (a *App) finalizeSession(sessionID string) {
 		if h.sftp != nil {
 			_ = h.sftp.Close()
 		}
-		runtime.EventsEmit(a.ctx, "terminal-closed", sessionID)
+		a.emitEvent("terminal-closed", sessionID)
 	})
 }
 
@@ -322,11 +334,11 @@ func (a *App) terminalReadLoop(sessionID string, r io.Reader, isStdout bool) {
 		if n > 0 {
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
-			text := sanitizeTerminalOutput(decodeRemote(chunk))
+			text := decodeRemote(chunk)
 			if a.logger != nil {
 				a.logger.Debug("terminal-output id=%s n=%d", sessionID, n)
 			}
-			runtime.EventsEmit(a.ctx, "terminal-output", sessionID, text)
+			a.emitEvent("terminal-output", sessionID, text)
 		}
 		if err != nil {
 			if isStdout {
@@ -394,20 +406,6 @@ func decodeRemote(b []byte) string {
 		return string(decoded)
 	}
 	return string(b)
-}
-
-var reTerminalGarbage = regexp.MustCompile(`[wW]{12,}`)
-var reTerminalEscGarbage = regexp.MustCompile(`\x1b\[[?0-9;]*c|\x1b\[>[?0-9;]*c|\x1b\[[0-9]+;[0-9]+R|\x1b\[[0-9]+;[0-9]+;[0-9]+t|\x1b\[6n|\x1b\[(18|19|14)t`)
-var reTerminalDoubleNL = regexp.MustCompile(`(\r\n)(?:\r\n)+`)
-
-func sanitizeTerminalOutput(s string) string {
-	if s == "" {
-		return s
-	}
-	s = reTerminalEscGarbage.ReplaceAllString(s, "")
-	s = reTerminalGarbage.ReplaceAllString(s, "")
-	s = reTerminalDoubleNL.ReplaceAllString(s, "$1")
-	return s
 }
 
 func isUTF8(b []byte) bool {

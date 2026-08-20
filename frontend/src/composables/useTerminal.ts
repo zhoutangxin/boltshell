@@ -8,41 +8,17 @@ import { ResizeSession, SendSessionInput } from '../../wailsjs/go/main/App.js'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
 import type { SessionTab } from '../types'
-import { registerTerminalCsiHandlers, sanitizeTerminalChunk } from '../utils/terminalFilter'
 
 const MAX_BUFFER_CHARS = 512 * 1024
 
-/**
- * 绑定 xterm 输入：仅 onKey + 粘贴/IME 发往 SSH，不监听 onData
- * onData 会包含 xterm 对 CSI 查询的自动应答，发回 shell 后被 echo 成 □WWWW…
- */
-function bindTerminalInput(term: Terminal, sessionID: string, hostEl: HTMLElement) {
-  registerTerminalCsiHandlers(term)
-
-  term.attachCustomKeyEventHandler((ev) => {
-    if (ev.type === 'keydown' || ev.type === 'keypress') {
-      if (ev.isComposing || (ev as KeyboardEvent).keyCode === 229) return true
-      return false
-    }
-    return true
-  })
-
-  term.onKey(({ key }) => {
-    if (key) SendSessionInput(sessionID, key).catch(console.error)
-  })
-
-  hostEl.addEventListener('paste', (ev) => {
-    const text = ev.clipboardData?.getData('text')
-    if (text) {
-      ev.preventDefault()
-      SendSessionInput(sessionID, text).catch(console.error)
-    }
-  })
-
-  hostEl.addEventListener('compositionend', (ev) => {
-    const text = (ev as CompositionEvent).data
-    if (text) SendSessionInput(sessionID, text).catch(console.error)
-  })
+type TermEntry = {
+  term: Terminal
+  fit: FitAddon
+  opened: boolean
+  inputBound: boolean
+  /** 已同步给远端 PTY 的尺寸，用于避免重复下发 WindowChange */
+  syncedCols: number
+  syncedRows: number
 }
 
 export function useTerminal(
@@ -51,44 +27,36 @@ export function useTerminal(
   isTypingInForm: () => boolean,
 ) {
   const terminalHosts = new Map<string, HTMLDivElement>()
-  const termMap = new Map<string, { term: Terminal; fit: FitAddon; opened: boolean; resizeReady: boolean; inputBound: boolean }>()
+  const termMap = new Map<string, TermEntry>()
+  /** SSH 输出可能在 xterm DOM 挂载前到达，先缓冲 */
   const outputBuffers = new Map<string, string>()
-  const inboundTails = new Map<string, string>()
+  /** 已关闭的会话，用于丢弃后端迟到的输出，避免重建出永不释放的 xterm 实例 */
+  const disposedSessions = new Set<string>()
 
   function setTerminalHost(sessionID: string, el: unknown) {
-    if (el instanceof HTMLDivElement) {
-      const prev = terminalHosts.get(sessionID)
-      terminalHosts.set(sessionID, el)
-      if (prev === el) return
+    // 模板里用的是内联箭头函数 ref，Vue 每次重渲染都会先以 null 再以元素回调一次。
+    // 这里必须忽略 null，否则下面的 prev === el 短路失效，会话每次渲染都要重新 fit +
+    // 下发一次远端 PTY resize。宿主节点由 v-show 保活，清理走 disposeTerminal。
+    if (!(el instanceof HTMLDivElement)) return
 
-      const entry = termMap.get(sessionID)
-      if (entry?.opened && prev && prev !== el) {
-        entry.term.open(el)
-      }
-      if (sessionID === activeSessionID.value) {
-        nextTick(() => openTerminal(sessionID, 0, false))
-      }
-    } else {
-      terminalHosts.delete(sessionID)
-      inboundTails.delete(sessionID)
-      const entry = termMap.get(sessionID)
-      if (entry) {
-        entry.opened = false
-        entry.resizeReady = false
-      }
+    const prev = terminalHosts.get(sessionID)
+    if (prev === el) return
+    terminalHosts.set(sessionID, el)
+    if (sessionID === activeSessionID.value) {
+      nextTick(() => openTerminal(sessionID, 0, false))
     }
   }
 
   function writeToTerminal(sessionID: string, data: string) {
-    const cleaned = sanitizeTerminalChunk(sessionID, data, inboundTails)
-    if (!cleaned) return
+    if (!data) return
+    if (disposedSessions.has(sessionID)) return
     if (!termMap.has(sessionID)) ensureTerminal(sessionID)
     const entry = termMap.get(sessionID)
     if (entry?.opened) {
-      entry.term.write(cleaned)
+      entry.term.write(data)
       return
     }
-    let buf = (outputBuffers.get(sessionID) ?? '') + cleaned
+    let buf = (outputBuffers.get(sessionID) ?? '') + data
     if (buf.length > MAX_BUFFER_CHARS) {
       buf = buf.slice(buf.length - MAX_BUFFER_CHARS)
     }
@@ -97,11 +65,13 @@ export function useTerminal(
 
   function syncTerminalSize(sessionID: string) {
     const entry = termMap.get(sessionID)
-    if (!entry?.opened || !entry.resizeReady) return
+    if (!entry?.opened) return
     const { cols, rows } = entry.term
-    if (cols > 0 && rows > 0) {
-      ResizeSession(sessionID, cols, rows).catch(() => {})
-    }
+    if (cols < 1 || rows < 1) return
+    if (entry.syncedCols === cols && entry.syncedRows === rows) return
+    entry.syncedCols = cols
+    entry.syncedRows = rows
+    ResizeSession(sessionID, cols, rows).catch(() => {})
   }
 
   function flushTerminalBuffer(sessionID: string) {
@@ -121,8 +91,6 @@ export function useTerminal(
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 14,
-      cols: 80,
-      rows: 24,
       theme: {
         background: '#0b1220',
         foreground: '#e5e7eb',
@@ -132,15 +100,16 @@ export function useTerminal(
     })
     const fit = new FitAddon()
     term.loadAddon(fit)
-    registerTerminalCsiHandlers(term)
 
-    const entry = { term, fit, opened: false, resizeReady: false, inputBound: false }
-    term.onResize(({ cols, rows }) => {
-      if (!entry.resizeReady) return
-      if (cols > 0 && rows > 0) {
-        ResizeSession(sessionID, cols, rows).catch(() => {})
-      }
-    })
+    const entry: TermEntry = {
+      term,
+      fit,
+      opened: false,
+      inputBound: false,
+      syncedCols: 0,
+      syncedRows: 0,
+    }
+    term.onResize(() => syncTerminalSize(sessionID))
     termMap.set(sessionID, entry)
     return entry
   }
@@ -154,14 +123,17 @@ export function useTerminal(
     const entry = termMap.get(sessionID)
     if (!entry) return
 
-    const needsOpen = !entry.opened || entry.term.element?.parentElement !== el
-    if (needsOpen) {
-      if (!entry.inputBound) {
-        bindTerminalInput(entry.term, sessionID, el)
-        entry.inputBound = true
-      }
+    // 宿主节点被替换时（首次挂载 / DOM 重建）才需要重新 open
+    const remounted = !entry.opened || entry.term.element?.parentElement !== el
+    if (remounted) {
       entry.term.open(el)
       entry.opened = true
+      if (!entry.inputBound) {
+        entry.term.onData((data) => {
+          SendSessionInput(sessionID, data).catch(console.error)
+        })
+        entry.inputBound = true
+      }
       flushTerminalBuffer(sessionID)
     }
 
@@ -170,14 +142,13 @@ export function useTerminal(
       tries++
       const rect = el.getBoundingClientRect()
       if (rect.width < 5 || rect.height < 5) {
-        if (tries < 24) requestAnimationFrame(tryFit)
+        if (tries < 60) requestAnimationFrame(tryFit)
         return
       }
       try {
         entry.fit.fit()
-        entry.term.refresh(0, entry.term.rows - 1)
-        entry.resizeReady = true
-        flushTerminalBuffer(sessionID)
+        // 全屏重绘只在重新挂载后需要，常规切换交给 fit 触发的增量渲染
+        if (remounted) entry.term.refresh(0, entry.term.rows - 1)
         syncTerminalSize(sessionID)
         if (wantFocus && sessionID === activeSessionID.value && !isTypingInForm()) {
           entry.term.focus()
@@ -212,7 +183,7 @@ export function useTerminal(
     }
     terminalHosts.delete(sessionID)
     outputBuffers.delete(sessionID)
-    inboundTails.delete(sessionID)
+    disposedSessions.add(sessionID)
   }
 
   function fitActiveTerminal() {
