@@ -1,0 +1,179 @@
+# BoltShell 跨平台打包：macOS（必须在 macOS runner）+ Windows
+# 触发：打 tag v* 自动发 Release；或在 Actions 页手动 Run workflow
+
+name: Release Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      mac_platform:
+        description: 'macOS 架构（仅手动触发时生效；打 tag 时固定 universal）'
+        type: choice
+        default: darwin/arm64
+        options:
+          - darwin/arm64
+          - darwin/amd64
+          - darwin/universal
+      build_windows:
+        description: '是否同时打 Windows 包'
+        type: boolean
+        default: true
+
+env:
+  WAILS_VERSION: v2.15.0
+
+jobs:
+  build-macos:
+    name: macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
+
+      - name: Add Go bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Sync remote config embed
+        run: cp config/sponsors.remote.json internal/sponsors/remote.embed.json
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            ver=$(grep 'var Version' internal/version/version.go | sed -n 's/.*"\([^"]*\)".*/\1/p')
+            echo "version=${ver}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Resolve macOS platform
+        id: mac
+        shell: bash
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "platform=darwin/universal" >> "$GITHUB_OUTPUT"
+            echo "suffix=universal" >> "$GITHUB_OUTPUT"
+          else
+            platform="${{ inputs.mac_platform }}"
+            echo "platform=${platform}" >> "$GITHUB_OUTPUT"
+            echo "suffix=${platform#darwin/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build macOS app
+        run: |
+          wails build -platform "${{ steps.mac.outputs.platform }}" \
+            -ldflags "-X boltshell/internal/version.Version=${{ steps.ver.outputs.version }}"
+
+      - name: Verify app bundle
+        run: test -d build/bin/BoltShell.app
+
+      - name: Package zip
+        run: |
+          cd build/bin
+          zip_name="BoltShell-macOS-${{ steps.mac.outputs.suffix }}.zip"
+          ditto -c -k --sequesterRsrc --keepParent BoltShell.app "$zip_name"
+          echo "ZIP_NAME=$zip_name" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ steps.mac.outputs.suffix }}
+          path: build/bin/${{ env.ZIP_NAME }}
+          if-no-files-found: error
+
+  build-windows:
+    name: Windows
+    if: github.ref_type == 'tag' || inputs.build_windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
+
+      - name: Add Go bin to PATH
+        shell: bash
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Sync remote config embed
+        shell: pwsh
+        run: Copy-Item config\sponsors.remote.json internal\sponsors\remote.embed.json
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            ver=$(grep 'var Version' internal/version/version.go | sed -n 's/.*"\([^"]*\)".*/\1/p')
+            echo "version=${ver}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build Windows exe
+        shell: bash
+        run: |
+          wails build -ldflags "-X boltshell/internal/version.Version=${{ steps.ver.outputs.version }}"
+
+      - name: Verify exe size
+        shell: pwsh
+        run: |
+          $exe = "build\bin\BoltShell.exe"
+          if (-not (Test-Path $exe)) { throw "BoltShell.exe not found" }
+          $size = (Get-Item $exe).Length
+          if ($size -lt 512KB) { throw "BoltShell.exe too small ($size bytes), build may be corrupt" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-amd64
+          path: build/bin/BoltShell.exe
+          if-no-files-found: error
+
+  release:
+    name: Create GitHub Release
+    if: github.ref_type == 'tag'
+    needs: [build-macos, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: dist
+
+      - name: List release files
+        run: find dist -type f -ls
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**
+          generate_release_notes: true
+          fail_on_unmatched_files: true

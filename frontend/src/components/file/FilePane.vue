@@ -41,7 +41,7 @@ defineEmits<{
   (e: 'update:fileTab', v: 'files' | 'cmd'): void
   (e: 'update:pathInputDraft', v: string): void
   (e: 'update:editorContent', v: string): void
-  (e: 'update:targetConnID', v: string): void
+  (e: 'update:targetConnId', v: string): void
   (e: 'split-drag', ev: MouseEvent): void
   (e: 'go-up'): void
   (e: 'refresh'): void
@@ -174,7 +174,7 @@ defineEmits<{
           :error="serverTransfer.error"
           :logs="serverTransfer.logs"
           @close="$emit('close-transfer')"
-          @update:target-conn-id="$emit('update:targetConnID', $event)"
+          @update:target-conn-id="$emit('update:targetConnId', $event)"
           @target-change="$emit('transfer-target-change')"
           @browse="$emit('browse-target', $event)"
           @browse-parent="$emit('browse-parent')"

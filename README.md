@@ -40,42 +40,44 @@
 └─ README.md               # 项目说明
 ```
 
-## 快速开始
-1) 安装 Go 1.21+  
-2) 构建
+## 开发与打包
 
-```bash
-go build ./cmd/boltshell
+本项目为 **Wails v2 桌面应用**（Go + Vue 3）。完整说明见 [`docs/开发调试与正式部署.md`](docs/开发调试与正式部署.md)。
+
+### 环境
+
+- Go 1.21+、Node.js / npm
+- Wails CLI：`go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0`
+- 首次：`cd frontend && npm install`
+
+### 开发
+
+```powershell
+cd "E:\resource\person\ShellLite"
+wails dev
+# 浏览器打开 http://localhost:34115
 ```
 
-3) 运行（SSH 连接）
+### 打包
 
-```bash
-go run ./cmd/boltshell -host 192.168.1.10 -user root -pass 123456 -port 22
-# 指定命令（可选）
-go run ./cmd/boltshell -host 192.168.1.10 -user root -pass 123456 -cmd "uname -a"
-# 交互式 Shell（默认开启）
-go run ./cmd/boltshell -host 192.168.1.10 -user root -pass 123456
-# 只执行命令，不进入交互式
-go run ./cmd/boltshell -host 192.168.1.10 -user root -pass 123456 -shell=false -cmd "ls -la"
+```powershell
+wails build
+# Windows 产物：build\bin\BoltShell.exe
 ```
 
-默认读取当前目录的 config.json；也可通过环境变量或命令行覆盖
+### 发版前
 
-```bash
-# 环境变量方式（无需配置文件）
-# Windows PowerShell
-$env:SSH_HOST="192.168.1.10"; $env:SSH_USER="root"; $env:SSH_PASS="123456"; $env:SSH_PORT="22"
-go run ./cmd/boltshell
+1. 改 `internal/version/version.go`、`website/config/release.json`
+2. `Copy-Item config\sponsors.remote.json internal\sponsors\remote.embed.json`
+3. `wails build` → `.\scripts\deploy-server.ps1`
 
-# 指定其他配置文件路径
-go run ./cmd/boltshell -config ./config.json
-```
+**无 Mac 打 macOS 包**：push 到 GitHub 后 `git tag v1.0.1 && git push github v1.0.1`，见 [GitHub Actions 说明](docs/开发调试与正式部署.md#06-github-actions-自动打包推荐无-mac-时打-macos-包)。
 
-4) 运行测试
+### 测试
 
-```bash
+```powershell
 go test ./...
+cd frontend; npm run test
 ```
 
 ## 配置
@@ -119,26 +121,6 @@ go run ./cmd/boltshell -http 127.0.0.1:8080
 - 打包后使用：
   - 将 config.json 和可选 data.db 放在 exe 同目录
   - 运行：BoltShell.exe -http 127.0.0.1:8080
-
-## 打包为 exe
-在 Windows 下：
-
-```powershell
-wails build
-# 或
-go build -trimpath -ldflags "-s -w" -o dist/BoltShell.exe ./cmd/boltshell
-# 将 config.json 放到 dist 与 exe 同目录，双击即可按配置连接
-```
-
-跨平台（在任意平台交叉编译 Windows）：
-
-```bash
-GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o dist/BoltShell.exe ./cmd/boltshell
-# 运行时会优先读取 exe 所在目录的 config.json，其次读取当前工作目录
-```
-
-无外部配置文件运行：
-- 设置环境变量或使用命令行参数即可，无需放置 config.json
 
 ## 日志
 日志统一以等级前缀输出，例如：

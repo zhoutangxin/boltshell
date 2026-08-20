@@ -441,4 +441,76 @@ MIT
 
 ---
 
-*文档结束。现在去买 boltshell.com。*
+## 十、开发与打包指令
+
+详细说明见 [`docs/开发调试与正式部署.md`](docs/开发调试与正式部署.md)。以下为常用命令速查（Windows，项目根目录 `E:\resource\person\ShellLite`）。
+
+### 10.1 环境（首次）
+
+```powershell
+go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0
+cd frontend; npm install; cd ..
+```
+
+### 10.2 开发调试
+
+```powershell
+cd "E:\resource\person\ShellLite"
+& 'D:\golang\gopath\bin\wails.exe' dev
+# 浏览器打开 http://localhost:34115（勿用 Vite 5173 端口）
+```
+
+```powershell
+cd frontend
+npm run test        # 前端单元测试
+go test ./...       # Go 测试（在项目根目录）
+```
+
+### 10.3 正式打包
+
+```powershell
+# Windows → build\bin\BoltShell.exe
+cd "E:\resource\person\ShellLite"
+& 'D:\golang\gopath\bin\wails.exe' build
+```
+
+```bash
+# macOS → 必须在 Mac 本机执行，产物 build/bin/BoltShell.app
+xcode-select --install
+go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0
+cd /path/to/ShellLite
+cd frontend && npm install && cd ..
+cp config/sponsors.remote.json internal/sponsors/remote.embed.json
+
+wails build                              # 当前架构
+wails build -platform darwin/arm64       # Apple Silicon
+wails build -platform darwin/amd64       # Intel
+wails build -platform darwin/universal   # 通用包
+```
+
+### 10.4 发版流程
+
+1. 更新 `internal/version/version.go` 与 `website/config/release.json`
+2. 同步远程配置：`Copy-Item config\sponsors.remote.json internal\sponsors\remote.embed.json`
+3. 本地打包：`wails build`，或 push tag 让 GitHub Actions 打包（见 10.5）
+4. 部署：`.\scripts\deploy-server.ps1`
+
+### 10.5 GitHub Actions 打 macOS 包（无 Mac 时用）
+
+代码 push 到 **GitHub** 后：
+
+```powershell
+git push github master
+git tag v1.0.1
+git push github v1.0.1
+```
+
+Actions 自动打出 `BoltShell-macOS-universal.zip` + `BoltShell.exe`，并发布到 GitHub Releases。
+
+手动测试：GitHub → Actions → **Release Build** → Run workflow。
+
+详见 [`docs/开发调试与正式部署.md`](docs/开发调试与正式部署.md) 第 0.6 节。
+
+---
+
+*文档结束。*
