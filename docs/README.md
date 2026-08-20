@@ -24,7 +24,9 @@
 |------|------|
 | [商业化与开源策略](business/BoltShell_商业化与开源策略.md) | Freemium / Pro / Team、开源边界、收入粗算 |
 | [赞助位配置说明](business/BoltShell_赞助位配置说明.md) | 远程 `sponsors.json`、slotId、客户端读取路径 |
-| [广告术语与指标说明](business/BoltShell_广告术语与指标说明.md) | PV / UV / DAU / MAU / slot / CTR / CPM 等口径 |
+| [广告术语与指标说明](business/BoltShell_广告术语与指标说明.md) | PV / UV / DAU / MAU / slot / CTR / CPM / CPT / SDK 等口径 |
+| [赞助位报价与市场参考](business/BoltShell_赞助位报价与市场参考.md) | 双页位数量、刊例、报价示例、公开市场价格与曝光参考 |
+| [客户端赞助数据统计设计](business/BoltShell_客户端赞助数据统计设计.md) | SSH 客户端如何埋点、去重曝光、上报与汇总报数；含 cloud 工程建议 |
 
 ## 工程与架构 · `engineering/`
 
@@ -32,14 +34,17 @@
 |------|------|
 | [前端结构说明](engineering/BoltShell_前端结构说明.md) | Vue 目录、组件、状态与赞助位接入 |
 | [后端架构评审](engineering/BoltShell_后端架构评审.md) | Go / Wails 分层、API、安全与待改进 |
+| [Cloud / 服务端命名与架构](engineering/BoltShell_Cloud服务架构.md) | `boltshell-server` 命名、Go+Vue 单体、统计 API 设计 |
 | [开发调试与正式部署](engineering/开发调试与正式部署.md) | 本地开发、打包、发版、GitHub Actions |
 
 ## 相关（非本目录）
 
 | 路径 | 说明 |
 |------|------|
-| [`website/`](../website/) | 官网静态页与配置 |
-| [`frontend/docs/`](../frontend/docs/) | 交互原型 HTML（非运行时代码） |
+| [`server/config/README.md`](../server/config/README.md) | 项目 `server/config/`：远程入口、赞助兜底、升级模板（与用户 `config.json` 区分） |
+| [`server/config.example.json`](../server/config.example.json) | 用户运行时 `config.json` 字段说明与示例 |
+| [`website/`](../website/) | 官网静态页与线上 `sponsors.json` / `release.json` |
+| [`web/docs/`](../web/docs/) | 交互原型 HTML（非运行时代码） |
 
 ---
 

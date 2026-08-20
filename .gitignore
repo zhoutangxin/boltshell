@@ -1,5 +1,6 @@
 bin/
 build/bin/
+server/build/bin/
 dist/
 *.log
 *.tmp
@@ -8,15 +9,19 @@ dist/
 coverage*
 config.json
 data.db
+server/data.db
 
-# frontend
+# web（原 frontend）
 node_modules/
-frontend/node_modules/
-frontend/dist/
-frontend/.vite/
+web/node_modules/
+web/dist/
+web/.vite/
 # Wails 根据 package.json 字节自动生成，换行一变 MD5 就变，不必入库
-frontend/package.json.md5
+web/package.json.md5
+
+# Vite 写入、供 Go embed 的前端产物
+server/frontend/dist/**
+!server/frontend/dist/.gitkeep
 
 # IDE
 .idea/
-

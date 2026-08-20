@@ -1,6 +1,6 @@
 # 赞助位远程配置说明
 
-> 相关文档：[广告术语与指标](BoltShell_广告术语与指标说明.md) · [商业化策略](BoltShell_商业化与开源策略.md) · [文档索引](../README.md)
+> 相关文档：[广告术语与指标](BoltShell_广告术语与指标说明.md) · [商业化策略](BoltShell_商业化与开源策略.md) · [赞助位报价与市场参考](BoltShell_赞助位报价与市场参考.md) · [config/ 配置总览](../../server/config/README.md) · [文档索引](../README.md)
 
 客户端启动时由 Go 后端拉取远程 `sponsors.json`，断网或拉取失败时使用本地 fallback。
 
@@ -88,7 +88,7 @@ Linux：`~/.config/BoltShell/`
 | `app_sponsors.go` | Wails API、`resolveSponsorLocalPath` |
 | `internal/sponsors/remote.go` | 读取 sponsors.remote.json |
 | `internal/sponsors/sponsors.go` | 远程拉取、缓存、Load 优先级 |
-| `frontend/src/composables/useSponsors.ts` | 前端启动时调用 |
+| `web/src/composables/useSponsors.ts` | 前端启动时调用 |
 
 ### 你怎么改广告？
 

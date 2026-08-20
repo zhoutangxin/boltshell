@@ -1,0 +1,14 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "boltshell",
+  "outputfilename": "BoltShell",
+  "frontend:dir": "../web",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "周勉春",
+    "email": "617651002@qq.com"
+  }
+}

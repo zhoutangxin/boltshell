@@ -4,13 +4,13 @@
 > 技术栈：Vue 3 + TypeScript + Vite + xterm.js，经 Wails v2 嵌入桌面窗口  
 > 文档索引：[docs/README.md](../README.md) · 关联：[后端架构](BoltShell_后端架构评审.md)
 
-本文按「目录 → 每个文件做什么 → 数据怎么流」说明 `frontend/`。业务逻辑在 `composables/`，界面在 `components/`，`App.vue` 只负责编排。
+本文按「目录 → 每个文件做什么 → 数据怎么流」说明 `web/`。业务逻辑在 `composables/`，界面在 `components/`，`App.vue` 只负责编排。
 
 ---
 
 ## 一、整体职责
 
-前端是桌面客户端的 UI 层，不直连 SSH。它通过 Wails 生成的 `frontend/wailsjs/go/main/App.js` 调用 Go 方法，并通过 `EventsOn` 接收后端推送。
+前端是桌面客户端的 UI 层，不直连 SSH。它通过 Wails 生成的 `web/wailsjs/go/main/App.js` 调用 Go 方法，并通过 `EventsOn` 接收后端推送。
 
 | 用户看到的区域 | 对应代码 |
 |----------------|----------|
@@ -30,7 +30,7 @@
 ## 二、目录结构（与仓库一致）
 
 ```
-frontend/
+web/
 ├── index.html                 # HTML 壳：#app + #wails-spinner
 ├── package.json               # 依赖与脚本（vite / vitest / vue-tsc）
 ├── package-lock.json
@@ -111,11 +111,11 @@ Vite 客户端类型 + `*.vue` 模块声明，让 TypeScript 能 import Vue 单�
 
 打包时原样拷到产物根目录。图标给窗口/标签页；`config/sponsors.json` 可在开发环境作为赞助配置本地文件。
 
-### `frontend/docs/`
+### `web/docs/`
 
 FinalShell 风格交互/FTP 原型，给设计对照，不参与 `wails build`。
 
-### `frontend/wailsjs/`
+### `web/wailsjs/`
 
 `wails generate` / `wails dev` 生成。前端只应从这里调 Go，不要手改。`App.js` 里每个 `export function Xxx` 对应后端 `App` 的导出方法。
 

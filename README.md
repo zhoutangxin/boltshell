@@ -9,16 +9,16 @@
 
 ## Logo
 
-应用图标：`build/appicon.png`（设计稿：`docs/product/logo/boltshell-logo-icon-v1.png`）
+应用图标：`server/build/appicon.png`（设计稿：`docs/product/logo/boltshell-logo-icon-v1.png`）
 
 - 电蓝闪电 — 秒连服务器的速度感  
 - 终端 `>_` — SSH 命令行  
 - 白底圆角 — 现代桌面应用风格  
 
-重新打包后 exe 会使用新图标：`wails build`
+重新打包后 exe 会使用新图标：在 `server/` 下执行 `wails build`
 
 ## 特性
-- 标准布局：`cmd/` + `internal/`
+- 顶层布局对齐服务端仓库：`deploy/` + `server/` + `web/`
 - 配置模块：支持从 JSON 文件加载，带默认值
 - 日志模块：封装 `log`，支持 `DEBUG/INFO/WARN/ERROR`
 - 单元测试：覆盖配置加载的关键路径
@@ -26,18 +26,19 @@
 ## 目录结构
 ```
 .
-├─ cmd/
-│  └─ boltshell/
-│     └─ main.go           # 程序入口与参数解析
-├─ internal/
-│  ├─ config/
-│  │  ├─ config.go         # 配置结构与 JSON 加载
-│  │  └─ config_test.go    # 配置加载测试
-│  └─ logging/
-│     └─ logging.go        # 简单日志封装
-├─ go.mod                  # 模块信息
-├─ .gitignore              # 常见忽略规则
-└─ README.md               # 项目说明
+├─ deploy/                     # 发版/图标等脚本
+├─ server/                     # Go 后端 + Wails 工程
+│  ├─ main.go                  # 桌面入口，embed frontend/dist
+│  ├─ app.go / app_*.go        # 绑定到前端的 App
+│  ├─ cmd/boltshell/           # CLI 入口
+│  ├─ internal/                # db / ssh / sftp / config 等
+│  ├─ config/                  # 赞助远程入口等开发者配置
+│  ├─ go.mod
+│  └─ wails.json               # frontend:dir 指向 ../web
+├─ web/                        # Vue 前端（原 frontend）
+├─ docs/
+├─ website/                    # 官网静态页
+└─ README.md
 ```
 
 ## 开发与打包
@@ -48,12 +49,12 @@
 
 - Go 1.21+、Node.js / npm
 - Wails CLI：`go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0`
-- 首次：`cd frontend && npm install`
+- 首次：`cd web && npm install`
 
 ### 开发
 
 ```powershell
-cd "E:\resource\person\ShellLite"
+cd server
 wails dev
 # 浏览器打开 http://localhost:34115
 ```
@@ -61,23 +62,24 @@ wails dev
 ### 打包
 
 ```powershell
+cd server
 wails build
-# Windows 产物：build\bin\BoltShell.exe
+# Windows 产物：server\build\bin\BoltShell.exe
 ```
 
 ### 发版前
 
-1. 改 `internal/version/version.go`、`website/config/release.json`
-2. `Copy-Item config\sponsors.remote.json internal\sponsors\remote.embed.json`
-3. `wails build` → `.\scripts\deploy-server.ps1`
+1. 改 `server/internal/version/version.go`、`website/config/release.json`
+2. `Copy-Item server\config\sponsors.remote.json server\internal\sponsors\remote.embed.json`
+3. 在 `server/` 执行 `wails build` → 根目录 `.\deploy\deploy-server.ps1`
 
 **无 Mac 打 macOS 包**：push 到 GitHub 后 `git tag v1.0.1 && git push github v1.0.1`，见 [GitHub Actions 说明](docs/engineering/开发调试与正式部署.md#06-github-actions-自动打包推荐无-mac-时打-macos-包)。
 
 ### 测试
 
 ```powershell
-go test ./...
-cd frontend; npm run test
+cd server; go test ./...
+cd web; npm run test
 ```
 
 ## 配置
@@ -110,7 +112,8 @@ cd frontend; npm run test
 - 启动 Web 页面并使用 SQLite 存储：
 
 ```bash
-go run ./cmd/boltshell -http 127.0.0.1:8080
+cd server
+go run ./cmd/boltshell -host 127.0.0.1 -user root -pass xxx
 # 数据库路径可选：环境变量 DB_PATH 或配置中的 dbPath，默认 exe 同目录 data.db
 ```
 
@@ -132,7 +135,7 @@ go run ./cmd/boltshell -http 127.0.0.1:8080
 
 ## 约定
 - 模块名：`boltshell`
-- 布局：命令行入口置于 `cmd/boltshell/`，业务封装放入 `internal/`
+- 布局：Go 后端在 `server/`（含 `cmd/boltshell/`、`internal/`），Vue 在 `web/`，发版脚本在 `deploy/`
 - 配置默认值：未指定配置文件或字段缺省时，使用安全默认值
 - 仓库忽略：`config.json` 默认被忽略，避免提交环境私密信息
 

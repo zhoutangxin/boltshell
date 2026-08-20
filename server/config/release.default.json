@@ -1,0 +1,13 @@
+{
+  "version": "1.0.1",
+  "buildNumber": 2,
+  "releaseNotes": "BoltShell 新版本：性能优化与 bug 修复",
+  "downloadURL": "http://47.108.138.168/releases/BoltShell-1.0.1.exe",
+  "mandatory": false,
+  "publishedAt": "2026-08-20",
+
+  "_说明": "升级信息模板，客户端不直接读本文件。线上请维护 website/config/release.json（由 sponsors.remote.json 的 releaseURL 拉取）。详见 config/README.md",
+  "_说明_version": "最新版本号，与客户端 internal/version 比较",
+  "_说明_downloadURL": "安装包下载地址",
+  "_说明_mandatory": "是否强制升级"
+}

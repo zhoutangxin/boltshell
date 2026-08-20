@@ -450,7 +450,7 @@ MIT
 
 ```powershell
 go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0
-cd frontend; npm install; cd ..
+cd web; npm install; cd ..
 ```
 
 ### 10.2 开发调试
@@ -462,9 +462,10 @@ cd "E:\resource\person\ShellLite"
 ```
 
 ```powershell
-cd frontend
+cd web
 npm run test        # 前端单元测试
-go test ./...       # Go 测试（在项目根目录）
+cd ..\server
+go test ./...       # Go 测试
 ```
 
 ### 10.3 正式打包
@@ -480,8 +481,8 @@ cd "E:\resource\person\ShellLite"
 xcode-select --install
 go install github.com/wailsapp/wails/v2/cmd/wails@v2.15.0
 cd /path/to/ShellLite
-cd frontend && npm install && cd ..
-cp config/sponsors.remote.json internal/sponsors/remote.embed.json
+cd web && npm install && cd ..
+cp server/config/sponsors.remote.json server/internal/sponsors/remote.embed.json
 
 wails build                              # 当前架构
 wails build -platform darwin/arm64       # Apple Silicon
@@ -491,10 +492,10 @@ wails build -platform darwin/universal   # 通用包
 
 ### 10.4 发版流程
 
-1. 更新 `internal/version/version.go` 与 `website/config/release.json`
+1. 更新 `server/internal/version/version.go` 与 `website/config/release.json`
 2. 同步远程配置：`Copy-Item config\sponsors.remote.json internal\sponsors\remote.embed.json`
 3. 本地打包：`wails build`，或 push tag 让 GitHub Actions 打包（见 10.5）
-4. 部署：`.\scripts\deploy-server.ps1`
+4. 部署：`.\deploy\deploy-server.ps1`
 
 ### 10.5 GitHub Actions 打 macOS 包（无 Mac 时用）
 

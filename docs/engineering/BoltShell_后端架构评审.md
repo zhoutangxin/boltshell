@@ -4,7 +4,7 @@
 > 技术栈：Go + Wails v2 + SQLite（`modernc.org/sqlite`）+ `golang.org/x/crypto/ssh` + `github.com/pkg/sftp`  
 > 文档索引：[docs/README.md](../README.md) · 关联：[前端结构](BoltShell_前端结构说明.md)
 
-桌面 UI 只走 Wails（根目录 `main.go`）。`cmd/boltshell` 是独立命令行入口，不是 Gio GUI。
+桌面 UI 只走 Wails（`server/main.go`）。`server/cmd/boltshell` 是独立命令行入口，不是 Gio GUI。
 
 ---
 
@@ -27,30 +27,33 @@
 
 ```
 boltshell/
-├── main.go                  # Wails 桌面入口，embed frontend/dist
-├── app.go                   # App 核心：启动、连接 CRUD、SSH 会话生命周期
-├── app_sftp.go              # SFTP API、跨服传送、本地选文件
-├── app_transfer.go          # 上传/下载进度事件、打开本地下载目录
-├── app_sysinfo.go           # 远端 CPU/内存/磁盘/进程
-├── app_browse_pool.go       # BrowseConnectionDir 临时 SSH 连接池
-├── app_sponsors.go          # 赞助位配置 + Pro 判断给前端
-├── app_upgrade.go           # 版本号、检查更新、应用更新
-├── app_session_test.go      # 会话 map / finalize 单测
-├── app_browse_pool_test.go  # 浏览连接池单测
-├── go.mod / go.sum
-├── wails.json               # Wails 工程名、前端命令、输出名 BoltShell
-├── cmd/boltshell/main.go    # CLI：直连 SSH / 执行远程命令（无 Vue）
-└── internal/
-    ├── config/              # config.json
-    ├── db/                  # SQLite connections 表
-    ├── sshclient/           # SSH Dial、PTY、Run 命令
-    ├── sftpclient/          # SFTP 列表/读写/上传下载
-    ├── logging/             # 分级日志
-    ├── appdata/             # 用户数据目录、开发模式开关
-    ├── version/             # 客户端版本字符串
-    ├── updater/             # 拉 release.json、Windows 替换 exe
-    ├── sponsors/            # 远程赞助配置、缓存、关闭记录
-    └── license/             # Pro license.dat 校验
+├── deploy/                  # 发版脚本、图标生成
+├── web/                     # Vue 前端
+└── server/                  # Go 后端 + Wails
+    ├── main.go              # Wails 桌面入口，embed frontend/dist
+    ├── app.go               # App 核心：启动、连接 CRUD、SSH 会话生命周期
+    ├── app_sftp.go          # SFTP API、跨服传送、本地选文件
+    ├── app_transfer.go      # 上传/下载进度事件、打开本地下载目录
+    ├── app_sysinfo.go       # 远端 CPU/内存/磁盘/进程
+    ├── app_browse_pool.go   # BrowseConnectionDir 临时 SSH 连接池
+    ├── app_sponsors.go      # 赞助位配置 + Pro 判断给前端
+    ├── app_upgrade.go       # 版本号、检查更新、应用更新
+    ├── app_groups.go        # 连接分组
+    ├── app_connections_io.go # 连接导入导出
+    ├── go.mod / go.sum
+    ├── wails.json           # frontend:dir = ../web
+    ├── cmd/boltshell/main.go
+    └── internal/
+        ├── config/          # config.json
+        ├── db/              # SQLite connections 表
+        ├── sshclient/       # SSH Dial、PTY、Run 命令
+        ├── sftpclient/      # SFTP 列表/读写/上传下载
+        ├── logging/         # 分级日志
+        ├── appdata/         # 用户数据目录、开发模式开关
+        ├── version/         # 客户端版本字符串
+        ├── updater/         # 拉 release.json、Windows 替换 exe
+        ├── sponsors/        # 远程赞助配置、缓存、关闭记录
+        └── license/         # Pro license.dat 校验
 ```
 
 已删除：`internal/gui`（Gio）。桌面界面只保留 Wails。
@@ -59,7 +62,7 @@ boltshell/
 
 ## 三、Wails 绑定层（`package main`）
 
-这些文件组成绑定到前端的 `App` 对象。Wails 会把 **导出的方法**（大写开头、可 JSON 序列化）生成到 `frontend/wailsjs/go/main/App.js`。
+这些文件组成绑定到前端的 `App` 对象。Wails 会把 **导出的方法**（大写开头、可 JSON 序列化）生成到 `web/wailsjs/go/main/App.js`。
 
 ### `main.go`
 

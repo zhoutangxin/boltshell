@@ -108,7 +108,7 @@ curl https://boltshell.com/config/sponsors.json
 
 ## 与客户端关系
 
-- 远程 URL 在 `config/sponsors.remote.json`（开发者配置，随 `config/` 打包，**不是用户 config.json**）
+- 远程 URL 在 `server/config/sponsors.remote.json`（开发者配置，随 `config/` 打包，**不是用户 config.json**）
 - 客户端优先拉取该 URL（支持 `http://IP/...`）；断网失败时 fallback 本地默认
 - 改赞助内容：编辑 `website/config/sponsors.json` 部署到服务器；改 URL 后重新打包客户端
 

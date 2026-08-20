@@ -38,14 +38,14 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: server/go.mod
           cache: true
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: web/package-lock.json
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
@@ -54,7 +54,7 @@ jobs:
         run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Sync remote config embed
-        run: cp config/sponsors.remote.json internal/sponsors/remote.embed.json
+        run: cp server/config/sponsors.remote.json server/internal/sponsors/remote.embed.json
 
       - name: Resolve version
         id: ver
@@ -63,7 +63,7 @@ jobs:
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           else
-            ver=$(grep 'var Version' internal/version/version.go | sed -n 's/.*"\([^"]*\)".*/\1/p')
+            ver=$(grep 'var Version' server/internal/version/version.go | sed -n 's/.*"\([^"]*\)".*/\1/p')
             echo "version=${ver}" >> "$GITHUB_OUTPUT"
           fi
 
@@ -81,28 +81,29 @@ jobs:
           fi
 
       - name: Install frontend dependencies
-        working-directory: frontend
+        working-directory: web
         shell: bash
         run: |
           npm ci --no-audit --no-fund
           test -f node_modules/vite/bin/vite.js
 
       - name: Build frontend
-        working-directory: frontend
+        working-directory: web
         shell: bash
         run: node ./node_modules/vite/bin/vite.js build
 
       - name: Build macOS app
+        working-directory: server
         run: |
           wails build -s -platform "${{ steps.mac.outputs.platform }}" \
             -ldflags "-X boltshell/internal/version.Version=${{ steps.ver.outputs.version }}"
 
       - name: Verify app bundle
-        run: test -d build/bin/BoltShell.app
+        run: test -d server/build/bin/BoltShell.app
 
       - name: Package zip
         run: |
-          cd build/bin
+          cd server/build/bin
           zip_name="BoltShell-macOS-${{ steps.mac.outputs.suffix }}.zip"
           ditto -c -k --sequesterRsrc --keepParent BoltShell.app "$zip_name"
           echo "ZIP_NAME=$zip_name" >> "$GITHUB_ENV"
@@ -110,7 +111,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: macos-${{ steps.mac.outputs.suffix }}
-          path: build/bin/${{ env.ZIP_NAME }}
+          path: server/build/bin/${{ env.ZIP_NAME }}
           if-no-files-found: error
 
   build-windows:
@@ -122,14 +123,14 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: server/go.mod
           cache: true
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: web/package-lock.json
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
@@ -140,7 +141,7 @@ jobs:
 
       - name: Sync remote config embed
         shell: pwsh
-        run: Copy-Item config\sponsors.remote.json internal\sponsors\remote.embed.json
+        run: Copy-Item server\config\sponsors.remote.json server\internal\sponsors\remote.embed.json
 
       - name: Resolve version
         id: ver
@@ -149,23 +150,24 @@ jobs:
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           else
-            ver=$(grep 'var Version' internal/version/version.go | sed -n 's/.*"\([^"]*\)".*/\1/p')
+            ver=$(grep 'var Version' server/internal/version/version.go | sed -n 's/.*"\([^"]*\)".*/\1/p')
             echo "version=${ver}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Install frontend dependencies
-        working-directory: frontend
+        working-directory: web
         shell: bash
         run: |
           npm ci --no-audit --no-fund
           test -f node_modules/vite/bin/vite.js
 
       - name: Build frontend
-        working-directory: frontend
+        working-directory: web
         shell: bash
         run: node ./node_modules/vite/bin/vite.js build
 
       - name: Build Windows exe
+        working-directory: server
         shell: bash
         run: |
           wails build -s -ldflags "-X boltshell/internal/version.Version=${{ steps.ver.outputs.version }}"
@@ -173,7 +175,7 @@ jobs:
       - name: Verify exe size
         shell: pwsh
         run: |
-          $exe = "build\bin\BoltShell.exe"
+          $exe = "server\build\bin\BoltShell.exe"
           if (-not (Test-Path $exe)) { throw "BoltShell.exe not found" }
           $size = (Get-Item $exe).Length
           if ($size -lt 512KB) { throw "BoltShell.exe too small ($size bytes), build may be corrupt" }
@@ -181,7 +183,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: windows-amd64
-          path: build/bin/BoltShell.exe
+          path: server/build/bin/BoltShell.exe
           if-no-files-found: error
 
   build-linux:
@@ -193,14 +195,14 @@ jobs:
 
       - uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: server/go.mod
           cache: true
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: web/package-lock.json
 
       # Wails 桌面窗口在 Linux 上依赖 GTK 与 WebKitGTK
       - name: Install Linux build deps
@@ -215,7 +217,7 @@ jobs:
         run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
       - name: Sync remote config embed
-        run: cp config/sponsors.remote.json internal/sponsors/remote.embed.json
+        run: cp server/config/sponsors.remote.json server/internal/sponsors/remote.embed.json
 
       - name: Resolve version
         id: ver
@@ -224,24 +226,25 @@ jobs:
           if [[ "${{ github.ref_type }}" == "tag" ]]; then
             echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
           else
-            ver=$(grep 'var Version' internal/version/version.go | sed -n 's/.*"\([^"]*\)".*/\1/p')
+            ver=$(grep 'var Version' server/internal/version/version.go | sed -n 's/.*"\([^"]*\)".*/\1/p')
             echo "version=${ver}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Install frontend dependencies
-        working-directory: frontend
+        working-directory: web
         shell: bash
         run: |
           npm ci --no-audit --no-fund
           test -f node_modules/vite/bin/vite.js
 
       - name: Build frontend
-        working-directory: frontend
+        working-directory: web
         shell: bash
         run: node ./node_modules/vite/bin/vite.js build
 
       # runner 上只有 webkit2gtk-4.1，需要 webkit2_41 构建标签
       - name: Build Linux binary
+        working-directory: server
         run: |
           wails build -s -platform linux/amd64 -tags webkit2_41 \
             -ldflags "-X boltshell/internal/version.Version=${{ steps.ver.outputs.version }}"
@@ -249,8 +252,8 @@ jobs:
       - name: Verify binary
         shell: bash
         run: |
-          ls -la build/bin
-          bin=$(find build/bin -maxdepth 1 -type f -iname 'boltshell*' ! -name '*.tar.gz' | head -n1)
+          ls -la server/build/bin
+          bin=$(find server/build/bin -maxdepth 1 -type f -iname 'boltshell*' ! -name '*.tar.gz' | head -n1)
           test -n "$bin"
           chmod +x "$bin"
           file "$bin"
@@ -259,13 +262,13 @@ jobs:
       - name: Package tar.gz
         shell: bash
         run: |
-          cd build/bin
+          cd server/build/bin
           tar -czf BoltShell-linux-amd64.tar.gz "${{ env.LINUX_BIN }}"
 
       - uses: actions/upload-artifact@v4
         with:
           name: linux-amd64
-          path: build/bin/BoltShell-linux-amd64.tar.gz
+          path: server/build/bin/BoltShell-linux-amd64.tar.gz
           if-no-files-found: error
 
   release:
