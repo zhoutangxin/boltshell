@@ -249,18 +249,18 @@ jobs:
       - name: Verify binary
         shell: bash
         run: |
-          bin=$(ls build/bin/BoltShell build/bin/boltshell 2>/dev/null | head -n1)
+          ls -la build/bin
+          bin=$(find build/bin -maxdepth 1 -type f -iname 'boltshell*' ! -name '*.tar.gz' | head -n1)
           test -n "$bin"
           chmod +x "$bin"
           file "$bin"
-          echo "LINUX_BIN=$bin" >> "$GITHUB_ENV"
+          echo "LINUX_BIN=$(basename "$bin")" >> "$GITHUB_ENV"
 
       - name: Package tar.gz
         shell: bash
         run: |
           cd build/bin
-          bin_name=$(basename "${{ env.LINUX_BIN }}")
-          tar -czf BoltShell-linux-amd64.tar.gz "$bin_name"
+          tar -czf BoltShell-linux-amd64.tar.gz "${{ env.LINUX_BIN }}"
 
       - uses: actions/upload-artifact@v4
         with:
