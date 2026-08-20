@@ -1,16 +1,19 @@
-# ShellLite（壳轻）
+# BoltShell ⚡（闪壳）
 
-轻量 FinalShell 风格 SSH 桌面客户端：**Go + Wails**，上终端 + 下 SFTP + 系统监控 + 文件传输。
+> Bolt into your server.  
+> 闪电连接，一键运维。
 
-> 仓库模块名仍为 `shelllite`；打包产物为 **ShellLite.exe**。
+一体化 SSH 桌面客户端：**Go + Wails**，终端 + SFTP + 系统监控 + 跨服务器文件传输。
+
+> Go 模块名：`boltshell`；Wails 打包产物为 **BoltShell.exe**。
 
 ## Logo
 
-应用图标：`build/appicon.png`（设计稿另存于 `docs/shelllite-logo.png`）
+应用图标：`build/appicon.png`（设计稿：`docs/logo/boltshell-logo-icon-v1.png`）
 
-- 深蓝渐变底 — 终端/科技感  
-- 薄荷绿 `>_` — SSH 命令行  
-- 右上角光点 — 「Lite」轻量寓意  
+- 电蓝闪电 — 秒连服务器的速度感  
+- 终端 `>_` — SSH 命令行  
+- 白底圆角 — 现代桌面应用风格  
 
 重新打包后 exe 会使用新图标：`wails build`
 
@@ -24,7 +27,7 @@
 ```
 .
 ├─ cmd/
-│  └─ shelllite/
+│  └─ boltshell/
 │     └─ main.go           # 程序入口与参数解析
 ├─ internal/
 │  ├─ config/
@@ -42,19 +45,19 @@
 2) 构建
 
 ```bash
-go build ./cmd/shelllite
+go build ./cmd/boltshell
 ```
 
 3) 运行（SSH 连接）
 
 ```bash
-go run ./cmd/shelllite -host 192.168.1.10 -user root -pass 123456 -port 22
+go run ./cmd/boltshell -host 192.168.1.10 -user root -pass 123456 -port 22
 # 指定命令（可选）
-go run ./cmd/shelllite -host 192.168.1.10 -user root -pass 123456 -cmd "uname -a"
+go run ./cmd/boltshell -host 192.168.1.10 -user root -pass 123456 -cmd "uname -a"
 # 交互式 Shell（默认开启）
-go run ./cmd/shelllite -host 192.168.1.10 -user root -pass 123456
+go run ./cmd/boltshell -host 192.168.1.10 -user root -pass 123456
 # 只执行命令，不进入交互式
-go run ./cmd/shelllite -host 192.168.1.10 -user root -pass 123456 -shell=false -cmd "ls -la"
+go run ./cmd/boltshell -host 192.168.1.10 -user root -pass 123456 -shell=false -cmd "ls -la"
 ```
 
 默认读取当前目录的 config.json；也可通过环境变量或命令行覆盖
@@ -63,10 +66,10 @@ go run ./cmd/shelllite -host 192.168.1.10 -user root -pass 123456 -shell=false -
 # 环境变量方式（无需配置文件）
 # Windows PowerShell
 $env:SSH_HOST="192.168.1.10"; $env:SSH_USER="root"; $env:SSH_PASS="123456"; $env:SSH_PORT="22"
-go run ./cmd/shelllite
+go run ./cmd/boltshell
 
 # 指定其他配置文件路径
-go run ./cmd/shelllite -config ./config.json
+go run ./cmd/boltshell -config ./config.json
 ```
 
 4) 运行测试
@@ -80,7 +83,7 @@ go test ./...
 
 ```json
 {
-  "appName": "ShellLite",
+  "appName": "BoltShell",
   "logLevel": "INFO",
   "port": 22,
   "host": "192.168.1.10",
@@ -89,7 +92,7 @@ go test ./...
 }
 ```
 
-- `appName`：应用名称，缺省时为 `ShellLite`
+- `appName`：应用名称，缺省时为 `BoltShell`
 - `logLevel`：日志等级，支持 `DEBUG/INFO/WARN/ERROR`
 - `port`：SSH 端口，默认 22
 - `host`/`user`/`password`：连接所需的目标、账号与密码
@@ -105,7 +108,7 @@ go test ./...
 - 启动 Web 页面并使用 SQLite 存储：
 
 ```bash
-go run ./cmd/shelllite -http 127.0.0.1:8080
+go run ./cmd/boltshell -http 127.0.0.1:8080
 # 数据库路径可选：环境变量 DB_PATH 或配置中的 dbPath，默认 exe 同目录 data.db
 ```
 
@@ -115,20 +118,22 @@ go run ./cmd/shelllite -http 127.0.0.1:8080
 
 - 打包后使用：
   - 将 config.json 和可选 data.db 放在 exe 同目录
-  - 运行：ShellLite.exe -http 127.0.0.1:8080
+  - 运行：BoltShell.exe -http 127.0.0.1:8080
 
 ## 打包为 exe
 在 Windows 下：
 
 ```powershell
-go build -trimpath -ldflags "-s -w" -o dist/ShellLite.exe ./cmd/shelllite
+wails build
+# 或
+go build -trimpath -ldflags "-s -w" -o dist/BoltShell.exe ./cmd/boltshell
 # 将 config.json 放到 dist 与 exe 同目录，双击即可按配置连接
 ```
 
 跨平台（在任意平台交叉编译 Windows）：
 
 ```bash
-GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o dist/ShellLite.exe ./cmd/shelllite
+GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o dist/BoltShell.exe ./cmd/boltshell
 # 运行时会优先读取 exe 所在目录的 config.json，其次读取当前工作目录
 ```
 
@@ -139,13 +144,13 @@ GOOS=windows GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o dist/ShellLite.
 日志统一以等级前缀输出，例如：
 
 ```
-[INFO] ShellLite 启动
-[INFO] 配置: app=ShellLite level=INFO port=0
+[INFO] BoltShell 启动
+[INFO] 配置: app=BoltShell level=INFO port=0
 ```
 
 ## 约定
-- 模块名：`shelllite`
-- 布局：命令行入口置于 `cmd/shelllite/`，业务封装放入 `internal/`
+- 模块名：`boltshell`
+- 布局：命令行入口置于 `cmd/boltshell/`，业务封装放入 `internal/`
 - 配置默认值：未指定配置文件或字段缺省时，使用安全默认值
 - 仓库忽略：`config.json` 默认被忽略，避免提交环境私密信息
 

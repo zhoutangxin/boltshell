@@ -12,6 +12,8 @@ export function CloseSession(arg1:string):Promise<void>;
 
 export function DownloadFromRemote(arg1:string,arg2:string,arg3:string):Promise<void>;
 
+export function GetConnectionHome(arg1:string):Promise<string>;
+
 export function GetRemoteHome(arg1:string):Promise<string>;
 
 export function GetSessionSysInfo(arg1:string):Promise<main.SysInfo>;

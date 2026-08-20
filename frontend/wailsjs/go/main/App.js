@@ -18,6 +18,10 @@ export function DownloadFromRemote(arg1, arg2, arg3) {
   return window['go']['main']['App']['DownloadFromRemote'](arg1, arg2, arg3);
 }
 
+export function GetConnectionHome(arg1) {
+  return window['go']['main']['App']['GetConnectionHome'](arg1);
+}
+
 export function GetRemoteHome(arg1) {
   return window['go']['main']['App']['GetRemoteHome'](arg1);
 }

@@ -12,11 +12,11 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/text/encoding/simplifiedchinese"
-	"shelllite/internal/config"
-	"shelllite/internal/db"
-	"shelllite/internal/logging"
-	"shelllite/internal/sftpclient"
-	"shelllite/internal/sshclient"
+	"boltshell/internal/config"
+	"boltshell/internal/db"
+	"boltshell/internal/logging"
+	"boltshell/internal/sftpclient"
+	"boltshell/internal/sshclient"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -87,12 +87,12 @@ func (a *App) initBackend() error {
 		level = logging.Error
 	}
 	a.logger = logging.New(os.Stdout, level)
-	a.logger.Info("ShellLite (wails) backend init ok")
+	a.logger.Info("BoltShell (wails) backend init ok")
 	return nil
 }
 
 func firstNonEmptyFromConfigEnv(cfg config.Config) string {
-	// 兼容你 cmd/shelllite/main.go 的逻辑：环境变量优先其次 config
+	// 兼容 cmd/boltshell/main.go 的逻辑：环境变量优先其次 config
 	if v := os.Getenv("DB_PATH"); v != "" {
 		return v
 	}

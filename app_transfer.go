@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"strings"
 
-	"shelllite/internal/db"
+	"boltshell/internal/db"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )

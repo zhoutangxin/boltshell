@@ -12,7 +12,7 @@
 1. 键盘硬件
 2. 操作系统 （Windows / macOS / Linux）
 3. 图形/输入库 （这里是 Gio）
-4. 应用程序 （ssh-go GUI）
+4. 应用程序 （BoltShell GUI）
 5. SSH 协议 / 客户端
 6. 远端 Linux Shell （bash / zsh 等）
    任何一环对“删除键”的编码/解释不一致，都会导致最终行为不一致。

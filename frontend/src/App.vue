@@ -27,6 +27,7 @@ import {
   WriteRemoteFile,
   TransferToConnection,
   BrowseConnectionDir,
+  GetConnectionHome,
 } from '../wailsjs/go/main/App.js'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
@@ -104,7 +105,7 @@ type TransferTask = {
   updatedAt: number
 }
 
-const DOWNLOAD_DIR_KEY = 'shelllite-download-dir'
+const DOWNLOAD_DIR_KEY = 'boltshell-download-dir'
 const downloadDir = ref(localStorage.getItem(DOWNLOAD_DIR_KEY) || '')
 const transferTasks = reactive<TransferTask[]>([])
 const transferPanelOpen = ref(false)
@@ -204,9 +205,26 @@ async function openTransferDialog() {
     }
     transfer.targetConnID = transfer.connections[0].ID
     transfer.open = true
+    await loadTransferTargetDir()
   } catch (e: any) {
     alert('获取连接列表失败: ' + (e?.message || e))
   }
+}
+
+async function loadTransferTargetDir() {
+  if (!transfer.targetConnID) return
+  try {
+    const home = await GetConnectionHome(transfer.targetConnID)
+    await browseTargetDir(home || '/')
+  } catch {
+    await browseTargetDir('/')
+  }
+}
+
+async function onTransferTargetChange() {
+  transfer.targetPath = '/'
+  transfer.targetDirs = []
+  await loadTransferTargetDir()
 }
 
 async function browseTargetDir(dir?: string) {
@@ -345,7 +363,7 @@ async function pickDownloadDir() {
     const dir = await PickDownloadDir()
     if (dir) saveDownloadDir(dir)
   } catch (e) {
-    console.error('[ShellLite] PickDownloadDir failed', e)
+    console.error('[BoltShell] PickDownloadDir failed', e)
   }
 }
 
@@ -357,7 +375,7 @@ async function openDownloadDir() {
   try {
     await OpenLocalFolder(downloadDir.value)
   } catch (e) {
-    console.error('[ShellLite] OpenLocalFolder failed', e)
+    console.error('[BoltShell] OpenLocalFolder failed', e)
   }
 }
 
@@ -402,8 +420,8 @@ const state = reactive({
   newGroupName: '',
 })
 
-const RECENT_KEY = 'shelllite-quick-connect'
-const EMPTY_GROUPS_KEY = 'shelllite-empty-groups'
+const RECENT_KEY = 'boltshell-quick-connect'
+const EMPTY_GROUPS_KEY = 'boltshell-empty-groups'
 const recentIDs = ref<string[]>([])
 const emptyGroups = ref<string[]>([])
 const selectedQuickID = ref('')
@@ -481,6 +499,8 @@ const collapsedGroups = reactive<Record<string, boolean>>({})
 const sessions = reactive<SessionTab[]>([])
 const activeSessionID = ref('')
 const fileBySession = reactive<Record<string, FilePaneState>>({})
+const pathInputFocused = ref(false)
+const pathInputDraft = ref('/')
 const splitWrapRef = ref<HTMLElement | null>(null)
 const sysInfo = ref<SysInfo>(emptySysInfo())
 const sysInfoLoading = ref(false)
@@ -542,7 +562,7 @@ async function refreshSysInfo(sessionID?: string) {
       Processes: Array.isArray(res.Processes) ? res.Processes : [],
     }
   } catch (e) {
-    console.error('[ShellLite] GetSessionSysInfo failed', e)
+    console.error('[BoltShell] GetSessionSysInfo failed', e)
   } finally {
     sysInfoLoading.value = false
   }
@@ -711,16 +731,18 @@ async function initFilePane(sessionID: string) {
   }
 }
 
-async function refreshRemoteFiles(sessionID?: string) {
+async function refreshRemoteFiles(sessionID?: string): Promise<boolean> {
   const sid = sessionID || activeSessionID.value
-  if (!sid) return
+  if (!sid) return false
   const st = ensureFileState(sid)
   st.loading = true
   try {
     st.files = await ListRemoteDir(sid, st.path)
     st.status = '就绪'
+    return true
   } catch (e) {
     st.status = errText(e)
+    return false
   } finally {
     st.loading = false
   }
@@ -747,24 +769,42 @@ async function navigateRemote(target: string) {
   await refreshRemoteFiles(sid)
 }
 
+function onPathInputFocus(e: FocusEvent) {
+  pathInputFocused.value = true
+  pathInputDraft.value = activeFileState.value?.path || '/'
+  const input = e.target as HTMLInputElement
+  input.select()
+}
+
+function onPathInputBlur() {
+  pathInputFocused.value = false
+  pathInputDraft.value = activeFileState.value?.path || '/'
+}
+
 async function onPathBarKeydown(e: KeyboardEvent) {
+  const input = e.target as HTMLInputElement
   if (e.key === 'Enter') {
     e.preventDefault()
-    const input = e.target as HTMLInputElement
-    const val = input.value.trim()
+    const val = pathInputDraft.value.trim()
     if (!val || !activeFileState.value) return
     const target = val.startsWith('/') ? val : `/${val}`
     if (target !== activeFileState.value.path) {
       const oldPath = activeFileState.value.path
       activeFileState.value.path = target
       activeFileState.value.selected = ''
-      try {
-        await refreshRemoteFiles()
-      } catch {
+      const ok = await refreshRemoteFiles()
+      if (!ok) {
         activeFileState.value.path = oldPath
+        pathInputDraft.value = oldPath
         await refreshRemoteFiles()
+      } else {
+        pathInputDraft.value = target
       }
     }
+    pathInputFocused.value = false
+    input.blur()
+  } else if (e.key === 'Escape') {
+    pathInputDraft.value = activeFileState.value?.path || '/'
     input.blur()
   }
 }
@@ -1143,7 +1183,7 @@ async function refreshList() {
     state.allConnections = Array.isArray(res) ? res : []
     seedRecentsIfEmpty()
   } catch (e) {
-    console.error('[ShellLite] ListConnections failed', e)
+    console.error('[BoltShell] ListConnections failed', e)
     state.allConnections = []
     setMgrMessage('获取连接列表失败', 'error')
   }
@@ -1198,7 +1238,7 @@ async function onConnect(conn: Connection) {
     if (state.closeAfterConnect) closeMgr()
   } catch (e) {
     setMgrMessage(`连接失败: ${errText(e)}`, 'error')
-    console.error('[ShellLite] onConnect failed', e)
+    console.error('[BoltShell] onConnect failed', e)
   }
 }
 
@@ -1263,7 +1303,7 @@ async function onCloseTab(sessionID: string) {
   try {
     await CloseSession(sessionID)
   } catch (e) {
-    console.error('[ShellLite] CloseSession failed', e)
+    console.error('[BoltShell] CloseSession failed', e)
   }
   const entry = termMap.get(sessionID)
   if (entry) {
@@ -1336,13 +1376,13 @@ function markSessionClosed(sessionID: string) {
 onMounted(async () => {
   EventsOn('terminal-output', (...args: unknown[]) => {
     const [sessionID, data] = parseEventArgs(args)
-    console.debug('[ShellLite] terminal-output', sessionID, data?.length)
+    console.debug('[BoltShell] terminal-output', sessionID, data?.length)
     if (sessionID) writeToTerminal(sessionID, data)
   })
 
   EventsOn('terminal-closed', (...args: unknown[]) => {
     const [sessionID] = parseEventArgs(args)
-    console.debug('[ShellLite] terminal-closed', sessionID)
+    console.debug('[BoltShell] terminal-closed', sessionID)
     if (sessionID) markSessionClosed(sessionID)
   })
 
@@ -1411,6 +1451,15 @@ watch(activeSessionID, () => {
   }
   refreshSysInfo(sid).catch(console.error)
 })
+
+watch(
+  () => activeFileState.value?.path,
+  (p) => {
+    if (!pathInputFocused.value) {
+      pathInputDraft.value = p || '/'
+    }
+  },
+)
 </script>
 
 <template>
@@ -1595,9 +1644,10 @@ watch(activeSessionID, () => {
               <div class="path-bar">
                 <input
                   class="path-input"
-                  :value="activeFileState.path || '/'"
+                  v-model="pathInputDraft"
                   @keydown="onPathBarKeydown($event)"
-                  @focus="($event.target as HTMLInputElement).select()"
+                  @focus="onPathInputFocus($event)"
+                  @blur="onPathInputBlur"
                   spellcheck="false"
                 />
               </div>
@@ -1694,7 +1744,7 @@ watch(activeSessionID, () => {
                     </div>
                     <div class="transfer-row">
                       <label>目标服务器：</label>
-                      <select v-model="transfer.targetConnID" class="transfer-select" @change="browseTargetDir('/')">
+                      <select v-model="transfer.targetConnID" class="transfer-select" @change="onTransferTargetChange">
                         <option value="" disabled>请选择…</option>
                         <option v-for="c in transfer.connections" :key="c.ID" :value="c.ID">{{ c.Name || c.Host }}</option>
                       </select>

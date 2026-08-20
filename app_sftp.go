@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"shelllite/internal/db"
-	"shelllite/internal/sftpclient"
-	"shelllite/internal/sshclient"
+	"boltshell/internal/db"
+	"boltshell/internal/sftpclient"
+	"boltshell/internal/sshclient"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -208,23 +208,44 @@ func (a *App) calcRemoteSize(c *sftpclient.Client, remotePath string) (int64, er
 	return total, nil
 }
 
-// BrowseConnectionDir 临时连接目标服务器并列出指定目录（仅返回文件夹）
-func (a *App) BrowseConnectionDir(connID string, remotePath string) ([]sftpclient.RemoteEntry, error) {
+func (a *App) dialConnectionSFTP(connID string) (*sftpclient.Client, func(), error) {
 	conn, err := db.GetByID(a.db, connID)
 	if err != nil {
-		return nil, fmt.Errorf("找不到连接: %w", err)
+		return nil, nil, fmt.Errorf("找不到连接: %w", err)
 	}
 	sshClient, err := sshclient.Dial(conn.Host, conn.Port, conn.User, conn.Password)
 	if err != nil {
-		return nil, fmt.Errorf("连接失败（%s:%d）: %w", conn.Host, conn.Port, err)
+		return nil, nil, fmt.Errorf("连接失败（%s:%d）: %w", conn.Host, conn.Port, err)
 	}
-	defer sshClient.Close()
-
 	sc, err := sftpclient.NewFromSSH(sshClient)
 	if err != nil {
-		return nil, fmt.Errorf("SFTP 初始化失败: %w", err)
+		sshClient.Close()
+		return nil, nil, fmt.Errorf("SFTP 初始化失败: %w", err)
 	}
-	defer sc.Close()
+	cleanup := func() {
+		sc.Close()
+		sshClient.Close()
+	}
+	return sc, cleanup, nil
+}
+
+// GetConnectionHome 临时连接目标服务器并返回其 home 目录
+func (a *App) GetConnectionHome(connID string) (string, error) {
+	sc, cleanup, err := a.dialConnectionSFTP(connID)
+	if err != nil {
+		return "", err
+	}
+	defer cleanup()
+	return sc.HomeDir()
+}
+
+// BrowseConnectionDir 临时连接目标服务器并列出指定目录（仅返回文件夹）
+func (a *App) BrowseConnectionDir(connID string, remotePath string) ([]sftpclient.RemoteEntry, error) {
+	sc, cleanup, err := a.dialConnectionSFTP(connID)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
 
 	entries, err := sc.ListDir(remotePath)
 	if err != nil {

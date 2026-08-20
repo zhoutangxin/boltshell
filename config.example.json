@@ -1,5 +1,5 @@
 {
-  "appName":  "ShellLite",
+  "appName":  "BoltShell",
   "logLevel": "INFO",
   "port":     22,
   "host":     "",
@@ -7,7 +7,7 @@
   "password": "",
   "dbPath":   "",
 
-  "_说明_appName":  "应用名称，日志中显示，默认 ShellLite",
+  "_说明_appName":  "应用名称，日志中显示，默认 BoltShell",
   "_说明_logLevel": "日志级别：DEBUG / INFO / WARN / ERROR，默认 INFO",
   "_说明_port":     "SSH 端口，默认 22",
   "_说明_host":     "SSH 服务器地址，留空则启动后从界面选择",
