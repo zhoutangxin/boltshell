@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import {defineConfig} from 'vite'
 import vue from '@vitejs/plugin-vue'
 
@@ -35,6 +36,10 @@ function wailsSpinnerAnchor() {
 
 export default defineConfig({
   plugins: [vue(), wailsSpinnerAnchor()],
+  test: {
+    environment: 'happy-dom',
+    include: ['src/**/*.test.ts'],
+  },
   server: {
     watch: {
       // Windows 下 wailsjs 绑定更新后，Vite 内存缓存常不失效

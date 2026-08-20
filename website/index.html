@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="BoltShell — 闪电连接，一键运维。一体化 SSH 客户端：终端 + SFTP + 系统监控。" />
+  <title>BoltShell ⚡ — 闪电连接，一键运维</title>
+  <link rel="icon" type="image/png" href="./assets/logo-icon.png" />
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a class="brand" href="#">
+        <img src="./assets/logo-icon.png" alt="BoltShell" width="36" height="36" />
+        <span>BoltShell</span>
+      </a>
+      <nav class="nav">
+        <a href="#features">特性</a>
+        <a href="#download">下载</a>
+        <a href="#pricing">Pro</a>
+        <a href="https://gitee.com/zhoutangxin/boltshell" target="_blank" rel="noopener">开源</a>
+      </nav>
+      <a class="btn btn-primary btn-sm" href="#download">免费下载</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="container hero-grid">
+        <div class="hero-copy">
+          <p class="eyebrow">面向运维开发者</p>
+          <h1>Bolt into your server.</h1>
+          <p class="subtitle">闪电连接，一键运维。终端、SFTP、系统监控，一个窗口全搞定。</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#download">下载 Windows 版</a>
+            <a class="btn btn-ghost" href="https://gitee.com/zhoutangxin/boltshell" target="_blank" rel="noopener">查看源码</a>
+          </div>
+          <p class="hero-note">🚧 开发中 · v0.1 即将发布</p>
+        </div>
+        <div class="hero-visual">
+          <div class="mock-window">
+            <div class="mock-title">BoltShell — 192.168.1.10</div>
+            <div class="mock-body">
+              <div class="mock-sidebar"></div>
+              <div class="mock-terminal">
+                <code>$ bolt prod-db</code>
+                <code>Connected.</code>
+                <code class="prompt">root@prod:~# _</code>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="section features">
+      <div class="container">
+        <h2 class="section-title">一体化 SSH 运维</h2>
+        <p class="section-desc">对标 FinalShell / Xshell，更现代、更简洁。</p>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <span class="feature-icon">⚡</span>
+            <h3>秒级连接</h3>
+            <p>保存会话，双击即连。CLI 命令 <code>bolt &lt;name&gt;</code> 更快。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon">📁</span>
+            <h3>内置 SFTP</h3>
+            <p>文件浏览、上传下载、跨服务器传送，无需另开 FTP 工具。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon">📊</span>
+            <h3>系统监控</h3>
+            <p>CPU、内存、磁盘、进程实时面板，运维状态一目了然。</p>
+          </article>
+          <article class="feature-card">
+            <span class="feature-icon">🔐</span>
+            <h3>本地存储</h3>
+            <p>连接配置 SQLite 本地保存，开源 Community 版可审计代码。</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="download" class="section download">
+      <div class="container download-box">
+        <h2>下载 BoltShell</h2>
+        <p>Windows 10/11（需 WebView2，系统通常已自带）</p>
+        <div class="download-actions">
+          <a class="btn btn-primary btn-lg" href="#" aria-disabled="true">Windows x64（即将发布）</a>
+          <a class="btn btn-ghost" href="https://gitee.com/zhoutangxin/boltshell/releases" target="_blank" rel="noopener">Release 页面</a>
+        </div>
+        <pre class="install-snippet"><code># 一行安装（规划中）
+curl -fsSL https://boltshell.com/install.sh | sh
+
+# Scoop（规划中）
+scoop install boltshell</code></pre>
+      </div>
+    </section>
+
+    <section id="pricing" class="section pricing">
+      <div class="container">
+        <h2 class="section-title">Community vs Pro</h2>
+        <div class="pricing-grid">
+          <article class="price-card">
+            <h3>Community</h3>
+            <p class="price">免费</p>
+            <ul>
+              <li>SSH 终端 + SFTP</li>
+              <li>≤5 个连接</li>
+              <li>基础系统监控</li>
+              <li>Apache 2.0 开源</li>
+            </ul>
+            <a class="btn btn-ghost" href="#download">免费使用</a>
+          </article>
+          <article class="price-card price-card--pro">
+            <span class="badge">推荐</span>
+            <h3>Pro</h3>
+            <p class="price">¥128 <small>永久买断</small></p>
+            <ul>
+              <li>无限连接数</li>
+              <li><strong>永久去广告</strong></li>
+              <li>Snippets / 会话录制</li>
+              <li>导入 Xshell 配置</li>
+            </ul>
+            <a class="btn btn-primary" href="#pro">即将开放购买</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="pro" class="section cta">
+      <div class="container cta-box">
+        <h2>赞助 BoltShell 开发</h2>
+        <p>免费版含克制赞助位；升级 Pro 获得干净无广告的专业体验。</p>
+        <a class="btn btn-primary" href="mailto:support@boltshell.com">联系预购 Pro</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div class="footer-brand">
+        <strong>BoltShell</strong> · 闪壳
+        <p>Bolt into your server.</p>
+      </div>
+      <div class="footer-links">
+        <a href="https://gitee.com/zhoutangxin/boltshell">Gitee</a>
+        <a href="https://github.com/boltshell-app/boltshell">GitHub</a>
+        <a href="./config/sponsors.json">赞助配置 API</a>
+      </div>
+      <p class="copyright">© 2026 BoltShell · MIT License</p>
+    </div>
+  </footer>
+</body>
+</html>

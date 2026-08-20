@@ -8,7 +8,6 @@ import (
 
 	"boltshell/internal/config"    // 本项目：配置加载（JSON）
 	"boltshell/internal/db"        // 本项目：SQLite 数据库操作
-	"boltshell/internal/gui"       // 本项目：图形界面（Gio）
 	"boltshell/internal/logging"   // 本项目：简单日志封装
 	"boltshell/internal/sshclient" // 本项目：SSH 连接和命令执行
 )
@@ -106,13 +105,12 @@ func main() { // 主函数：根据参数决定启动 GUI 还是直接 SSH
 		}
 	}
 
-	// 如果 host/user/pass 信息不完整，则启动 GUI，让你从图形界面选择/管理连接
+	// 未指定连接参数时提示使用 Wails 桌面客户端（旧 Gio GUI 已移除）
 	if h == "" || u == "" || p == "" {
-		if err := gui.Start(d, logger); err != nil { // 启动图形界面
-			fmt.Fprintf(os.Stderr, "GUI 异常: %v\n", err)
-			os.Exit(1)
-		}
-		return // GUI 退出后直接结束 main
+		fmt.Fprintln(os.Stderr, "未指定 SSH 连接参数。")
+		fmt.Fprintln(os.Stderr, "请使用 Wails 桌面客户端 BoltShell.exe，或通过参数连接：")
+		fmt.Fprintln(os.Stderr, "  boltshell -host 192.168.1.10 -user root -pass xxx")
+		os.Exit(1)
 	}
 
 	// 如果指定 shell 模式并且没有指定 cmd，则进入交互式 shell（类似 ssh 命令）

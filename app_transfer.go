@@ -1,3 +1,4 @@
+// 本地上传/下载进度事件与系统文件夹对话框。
 package main
 
 import (

@@ -13,7 +13,9 @@ type Config struct {
 	Host     string `json:"host"`     // 默认 SSH 主机
 	User     string `json:"user"`     // 默认 SSH 用户名
 	Password string `json:"password"` // 默认 SSH 密码
-	DBPath   string `json:"dbPath"`   // 数据库文件路径（为空时使用默认 data.db）
+	DBPath            string `json:"dbPath"`            // 数据库文件路径（为空时使用默认 data.db）
+	SponsorConfigURL  string `json:"sponsorConfigURL"`  // 远程赞助配置 JSON 地址
+	ProLicensed       bool   `json:"proLicensed"`       // 仅 BOLTSHELL_DEV=1 开发模式生效
 }
 
 // Default 返回一份默认配置，用于没有配置文件或配置不完整的情况

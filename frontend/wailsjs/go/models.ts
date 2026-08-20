@@ -49,6 +49,77 @@ export namespace main {
 	        this.Title = source["Title"];
 	    }
 	}
+	export class SponsorSlotView {
+	    SlotID: string;
+	    enabled: boolean;
+	    type: string;
+	    badge: string;
+	    title: string;
+	    desc: string;
+	    linkUrl: string;
+	    imageUrl?: string;
+	    dismissDays?: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new SponsorSlotView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.SlotID = source["SlotID"];
+	        this.enabled = source["enabled"];
+	        this.type = source["type"];
+	        this.badge = source["badge"];
+	        this.title = source["title"];
+	        this.desc = source["desc"];
+	        this.linkUrl = source["linkUrl"];
+	        this.imageUrl = source["imageUrl"];
+	        this.dismissDays = source["dismissDays"];
+	    }
+	}
+	export class SponsorConfigView {
+	    Version: number;
+	    UpdatedAt: string;
+	    CacheTTLSeconds: number;
+	    ProUpgradeURL: string;
+	    IsPro: boolean;
+	    Slots: SponsorSlotView[];
+	    DismissedUntil: Record<string, number>;
+	
+	    static createFrom(source: any = {}) {
+	        return new SponsorConfigView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.Version = source["Version"];
+	        this.UpdatedAt = source["UpdatedAt"];
+	        this.CacheTTLSeconds = source["CacheTTLSeconds"];
+	        this.ProUpgradeURL = source["ProUpgradeURL"];
+	        this.IsPro = source["IsPro"];
+	        this.Slots = this.convertValues(source["Slots"], SponsorSlotView);
+	        this.DismissedUntil = source["DismissedUntil"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	
 	export class SysProcInfo {
 	    MemKB: number;
 	    CPUPct: number;

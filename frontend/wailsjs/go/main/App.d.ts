@@ -10,6 +10,8 @@ export function BrowseConnectionDir(arg1:string,arg2:string):Promise<Array<sftpc
 
 export function CloseSession(arg1:string):Promise<void>;
 
+export function DismissSponsorSlot(arg1:string,arg2:number):Promise<void>;
+
 export function DownloadFromRemote(arg1:string,arg2:string,arg3:string):Promise<void>;
 
 export function GetConnectionHome(arg1:string):Promise<string>;
@@ -17,6 +19,10 @@ export function GetConnectionHome(arg1:string):Promise<string>;
 export function GetRemoteHome(arg1:string):Promise<string>;
 
 export function GetSessionSysInfo(arg1:string):Promise<main.SysInfo>;
+
+export function GetSponsorConfig(arg1:boolean):Promise<main.SponsorConfigView>;
+
+export function IsProLicensed():Promise<boolean>;
 
 export function ListActiveSessions():Promise<Array<main.SessionInfo>>;
 
@@ -37,6 +43,8 @@ export function PickLocalFile():Promise<string>;
 export function PickSaveFile(arg1:string):Promise<string>;
 
 export function ReadRemoteFile(arg1:string,arg2:string):Promise<string>;
+
+export function RefreshSponsorConfig():Promise<main.SponsorConfigView>;
 
 export function RemoveRemote(arg1:string,arg2:string):Promise<void>;
 

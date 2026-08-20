@@ -1,3 +1,12 @@
+// Package main — BoltShell Wails 桌面应用后端。
+//
+// 文件职责：
+//
+//	main.go          Wails 启动、嵌入 frontend/dist
+//	app.go           App 核心、SSH 会话生命周期、连接 CRUD
+//	app_sftp.go      SFTP 与跨服务器传送
+//	app_sysinfo.go   远端系统信息采集
+//	app_transfer.go  传输进度事件、本地文件夹对话框
 package main
 
 import (
@@ -7,31 +16,48 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"time"
 	"unicode/utf8"
 
 	"golang.org/x/text/encoding/simplifiedchinese"
+	"boltshell/internal/appdata"
 	"boltshell/internal/config"
 	"boltshell/internal/db"
 	"boltshell/internal/logging"
 	"boltshell/internal/sftpclient"
+	"boltshell/internal/sponsors"
 	"boltshell/internal/sshclient"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+// App 是绑定到 Wails 前端的根对象：管理 DB、SSH 会话池与事件推送。
 type App struct {
 	ctx       context.Context
 	db        *sql.DB
 	logger    *logging.Logger
 	termMu    sync.Mutex
 	sessions  map[string]*terminalHolder
+
+	// browseMu / browsePool：BrowseConnectionDir 临时 SFTP 连接池（避免每次浏览目录都完整 SSH 握手）
+	browseMu   sync.Mutex
+	browsePool map[string]*browsePoolEntry
+
+	// 赞助位 / License 状态存用户目录，不跟 exe 放一起
+	userDataDir            string
+	sponsorRemoteURL   string
+	sponsorLocalPath   string
+	sponsorClient      *sponsors.Client
+	sponsorDismiss     *sponsors.DismissStore
+	proLicensedDev     bool
 }
 
 func NewApp() *App {
 	return &App{
-		sessions: make(map[string]*terminalHolder),
+		sessions:   make(map[string]*terminalHolder),
+		browsePool: make(map[string]*browsePoolEntry),
 	}
 }
 
@@ -43,6 +69,7 @@ func (a *App) startup(ctx context.Context) {
 	}
 }
 
+// terminalHolder 一个 SSH Tab：PTY 终端 + 同连接 SFTP 客户端。
 type terminalHolder struct {
 	connID   string
 	title    string
@@ -51,6 +78,7 @@ type terminalHolder struct {
 	finalize sync.Once
 }
 
+// initBackend 加载 config.json、打开 SQLite、初始化表结构。
 func (a *App) initBackend() error {
 	// 读取配置：你现有的 config.json 规则这里复用
 	cfg := config.Default()
@@ -87,6 +115,20 @@ func (a *App) initBackend() error {
 		level = logging.Error
 	}
 	a.logger = logging.New(os.Stdout, level)
+
+	exeDir := "."
+	if exePath, err := os.Executable(); err == nil {
+		exeDir = filepath.Dir(exePath)
+	}
+	if ud, err := appdata.Dir(); err == nil {
+		a.userDataDir = ud
+	} else {
+		a.userDataDir = exeDir
+	}
+	a.sponsorRemoteURL = cfg.SponsorConfigURL
+	a.sponsorLocalPath = resolveSponsorLocalPath(exeDir)
+	a.proLicensedDev = cfg.ProLicensed
+
 	a.logger.Info("BoltShell (wails) backend init ok")
 	return nil
 }
@@ -205,7 +247,7 @@ func (a *App) StartSession(connID string) (string, error) {
 	}
 
 	// 每次连接都创建独立会话，支持多 Tab 同时保持
-	term, err := sshclient.NewTerminalSession(c.Host, c.Port, c.User, c.Password, 120, 32)
+	term, err := sshclient.NewTerminalSession(c.Host, c.Port, c.User, c.Password, 80, 24)
 	if err != nil {
 		return "", err
 	}
@@ -234,10 +276,8 @@ func (a *App) StartSession(connID string) (string, error) {
 		a.logger.Info("session started id=%s host=%s:%d", sid, c.Host, c.Port)
 	}
 
+	// PTY 模式下终端输出走 stdout，不再单独读 stderr（否则 MOTD/提示符会重复或乱码）
 	go a.terminalReadLoop(sid, term.Stdout, true)
-	if term.Stderr != nil {
-		go a.terminalReadLoop(sid, term.Stderr, false)
-	}
 	go func() {
 		err := term.Wait()
 		if a.logger != nil {
@@ -271,6 +311,7 @@ func (a *App) finalizeSession(sessionID string) {
 	})
 }
 
+// terminalReadLoop 异步读取 SSH 输出，GB18030 解码后 EventsEmit 到前端 xterm。
 func (a *App) terminalReadLoop(sessionID string, r io.Reader, isStdout bool) {
 	if r == nil {
 		return
@@ -281,7 +322,7 @@ func (a *App) terminalReadLoop(sessionID string, r io.Reader, isStdout bool) {
 		if n > 0 {
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
-			text := decodeRemote(chunk)
+			text := sanitizeTerminalOutput(decodeRemote(chunk))
 			if a.logger != nil {
 				a.logger.Debug("terminal-output id=%s n=%d", sessionID, n)
 			}
@@ -353,6 +394,20 @@ func decodeRemote(b []byte) string {
 		return string(decoded)
 	}
 	return string(b)
+}
+
+var reTerminalGarbage = regexp.MustCompile(`[wW]{12,}`)
+var reTerminalEscGarbage = regexp.MustCompile(`\x1b\[[?0-9;]*c|\x1b\[>[?0-9;]*c|\x1b\[[0-9]+;[0-9]+R|\x1b\[[0-9]+;[0-9]+;[0-9]+t|\x1b\[6n|\x1b\[(18|19|14)t`)
+var reTerminalDoubleNL = regexp.MustCompile(`(\r\n)(?:\r\n)+`)
+
+func sanitizeTerminalOutput(s string) string {
+	if s == "" {
+		return s
+	}
+	s = reTerminalEscGarbage.ReplaceAllString(s, "")
+	s = reTerminalGarbage.ReplaceAllString(s, "")
+	s = reTerminalDoubleNL.ReplaceAllString(s, "$1")
+	return s
 }
 
 func isUTF8(b []byte) bool {

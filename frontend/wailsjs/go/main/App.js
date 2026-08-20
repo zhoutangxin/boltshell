@@ -14,6 +14,10 @@ export function CloseSession(arg1) {
   return window['go']['main']['App']['CloseSession'](arg1);
 }
 
+export function DismissSponsorSlot(arg1, arg2) {
+  return window['go']['main']['App']['DismissSponsorSlot'](arg1, arg2);
+}
+
 export function DownloadFromRemote(arg1, arg2, arg3) {
   return window['go']['main']['App']['DownloadFromRemote'](arg1, arg2, arg3);
 }
@@ -28,6 +32,14 @@ export function GetRemoteHome(arg1) {
 
 export function GetSessionSysInfo(arg1) {
   return window['go']['main']['App']['GetSessionSysInfo'](arg1);
+}
+
+export function GetSponsorConfig(arg1) {
+  return window['go']['main']['App']['GetSponsorConfig'](arg1);
+}
+
+export function IsProLicensed() {
+  return window['go']['main']['App']['IsProLicensed']();
 }
 
 export function ListActiveSessions() {
@@ -68,6 +80,10 @@ export function PickSaveFile(arg1) {
 
 export function ReadRemoteFile(arg1, arg2) {
   return window['go']['main']['App']['ReadRemoteFile'](arg1, arg2);
+}
+
+export function RefreshSponsorConfig() {
+  return window['go']['main']['App']['RefreshSponsorConfig']();
 }
 
 export function RemoveRemote(arg1, arg2) {

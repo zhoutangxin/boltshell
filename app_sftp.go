@@ -1,3 +1,5 @@
+// SFTP 文件操作与跨服务器传送（Wails API）。
+// 已连接会话复用 terminalHolder.sftp；BrowseConnectionDir 临时 Dial 目标服务器。
 package main
 
 import (
@@ -229,23 +231,21 @@ func (a *App) dialConnectionSFTP(connID string) (*sftpclient.Client, func(), err
 	return sc, cleanup, nil
 }
 
-// GetConnectionHome 临时连接目标服务器并返回其 home 目录
+// GetConnectionHome 返回目标服务器 home 目录（复用 browse 连接池）
 func (a *App) GetConnectionHome(connID string) (string, error) {
-	sc, cleanup, err := a.dialConnectionSFTP(connID)
+	sc, err := a.getBrowseSFTP(connID)
 	if err != nil {
 		return "", err
 	}
-	defer cleanup()
 	return sc.HomeDir()
 }
 
-// BrowseConnectionDir 临时连接目标服务器并列出指定目录（仅返回文件夹）
+// BrowseConnectionDir 列出目标服务器指定目录下的子文件夹（复用 browse 连接池）
 func (a *App) BrowseConnectionDir(connID string, remotePath string) ([]sftpclient.RemoteEntry, error) {
-	sc, cleanup, err := a.dialConnectionSFTP(connID)
+	sc, err := a.getBrowseSFTP(connID)
 	if err != nil {
 		return nil, err
 	}
-	defer cleanup()
 
 	entries, err := sc.ListDir(remotePath)
 	if err != nil {

@@ -1,3 +1,4 @@
+// Wails 桌面入口：嵌入 Vue 前端，Bind App 暴露 Go 方法给 JavaScript。
 package main
 
 import (

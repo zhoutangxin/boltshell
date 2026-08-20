@@ -1,3 +1,4 @@
+// 远端系统信息采集：SSH 执行 shell 脚本解析 CPU/内存/磁盘/进程。
 package main
 
 import (
