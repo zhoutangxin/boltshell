@@ -1,7 +1,8 @@
 # BoltShell 品牌与产品规划文档
 
-> 生成时间：2026-08-20
-> 产品定位：一体化 SSH 运维终端（对标 Xshell / FinalShell）
+> 生成时间：2026-08-20  
+> 产品定位：一体化 SSH 运维终端（对标 Xshell / FinalShell）  
+> 文档索引：[docs/README.md](../README.md)
 
 ---
 
@@ -258,8 +259,8 @@ $ bolt export --format ssh-config >> ~/.ssh/config
 
 ## 六点五、赞助位 UI 规划（v1）
 
-> 详细商业化策略见 [BoltShell_商业化与开源策略.md](docs/BoltShell_商业化与开源策略.md)  
-> 远程配置规范见 [BoltShell_赞助位配置说明.md](docs/BoltShell_赞助位配置说明.md)
+> 详细商业化策略见 [商业化与开源策略](../business/BoltShell_商业化与开源策略.md)  
+> 远程配置规范见 [赞助位配置说明](../business/BoltShell_赞助位配置说明.md)
 
 ### 6.5.1 按页面划分（两个界面）
 
@@ -350,7 +351,7 @@ BoltShell 客户端只有 **两种界面态**，广告位 **互斥显示**（不
 | 官网静态配置 | `website/config/sponsors.json` |
 | 官网单页骨架 | `website/index.html` |
 | Nginx 部署说明 | `website/README.md` |
-| **配置文件读取路径（技术细节）** | [BoltShell_赞助位配置说明.md](docs/BoltShell_赞助位配置说明.md) |
+| **配置文件读取路径（技术细节）** | [赞助位配置说明](../business/BoltShell_赞助位配置说明.md) |
 
 无后台阶段：编辑 `config/sponsors.remote.json` + 服务器 `sponsors.json` → 打包 / 部署 → 客户端拉取生效。
 
@@ -443,7 +444,7 @@ MIT
 
 ## 十、开发与打包指令
 
-详细说明见 [`docs/开发调试与正式部署.md`](docs/开发调试与正式部署.md)。以下为常用命令速查（Windows，项目根目录 `E:\resource\person\ShellLite`）。
+详细说明见 [`开发调试与正式部署.md`](../engineering/开发调试与正式部署.md)。以下为常用命令速查（Windows，项目根目录 `E:\resource\person\ShellLite`）。
 
 ### 10.1 环境（首次）
 
@@ -509,7 +510,7 @@ Actions 自动打出 `BoltShell-macOS-universal.zip` + `BoltShell.exe`，并发�
 
 手动测试：GitHub → Actions → **Release Build** → Run workflow。
 
-详见 [`docs/开发调试与正式部署.md`](docs/开发调试与正式部署.md) 第 0.6 节。
+详见 [`开发调试与正式部署.md`](../engineering/开发调试与正式部署.md) 第 0.6 节。
 
 ---
 

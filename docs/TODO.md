@@ -18,7 +18,7 @@
 
 ---
 
-## 商业化（见 BoltShell_商业化与开源策略.md）
+## 商业化（见 [business/BoltShell_商业化与开源策略.md](business/BoltShell_商业化与开源策略.md)）
 
 - [ ] License 模块（free / pro / team）
 - [ ] 免费版连接数上限

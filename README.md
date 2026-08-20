@@ -9,7 +9,7 @@
 
 ## Logo
 
-应用图标：`build/appicon.png`（设计稿：`docs/logo/boltshell-logo-icon-v1.png`）
+应用图标：`build/appicon.png`（设计稿：`docs/product/logo/boltshell-logo-icon-v1.png`）
 
 - 电蓝闪电 — 秒连服务器的速度感  
 - 终端 `>_` — SSH 命令行  
@@ -42,7 +42,7 @@
 
 ## 开发与打包
 
-本项目为 **Wails v2 桌面应用**（Go + Vue 3）。完整说明见 [`docs/开发调试与正式部署.md`](docs/开发调试与正式部署.md)。
+本项目为 **Wails v2 桌面应用**（Go + Vue 3）。文档索引见 [`docs/README.md`](docs/README.md)；完整开发说明见 [`docs/engineering/开发调试与正式部署.md`](docs/engineering/开发调试与正式部署.md)。
 
 ### 环境
 
@@ -71,7 +71,7 @@ wails build
 2. `Copy-Item config\sponsors.remote.json internal\sponsors\remote.embed.json`
 3. `wails build` → `.\scripts\deploy-server.ps1`
 
-**无 Mac 打 macOS 包**：push 到 GitHub 后 `git tag v1.0.1 && git push github v1.0.1`，见 [GitHub Actions 说明](docs/开发调试与正式部署.md#06-github-actions-自动打包推荐无-mac-时打-macos-包)。
+**无 Mac 打 macOS 包**：push 到 GitHub 后 `git tag v1.0.1 && git push github v1.0.1`，见 [GitHub Actions 说明](docs/engineering/开发调试与正式部署.md#06-github-actions-自动打包推荐无-mac-时打-macos-包)。
 
 ### 测试
 

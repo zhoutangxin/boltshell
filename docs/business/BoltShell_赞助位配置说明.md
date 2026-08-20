@@ -1,5 +1,7 @@
 # 赞助位远程配置说明
 
+> 相关文档：[广告术语与指标](BoltShell_广告术语与指标说明.md) · [商业化策略](BoltShell_商业化与开源策略.md) · [文档索引](../README.md)
+
 客户端启动时由 Go 后端拉取远程 `sponsors.json`，断网或拉取失败时使用本地 fallback。
 
 ## 远程地址（开发者配置，非用户 config.json）
