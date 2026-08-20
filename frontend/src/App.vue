@@ -25,6 +25,8 @@ import {
   UploadToRemote,
   ReadRemoteFile,
   WriteRemoteFile,
+  TransferToConnection,
+  BrowseConnectionDir,
 } from '../wailsjs/go/main/App.js'
 import { Terminal } from 'xterm'
 import { FitAddon } from 'xterm-addon-fit'
@@ -159,6 +161,126 @@ function closeFileEditor() {
     if (!confirm('文件已修改但未保存，确定关闭？')) return
   }
   editor.open = false
+}
+
+const transfer = reactive({
+  open: false,
+  connections: [] as any[],
+  targetConnID: '',
+  targetPath: '/',
+  targetDirs: [] as any[],
+  browsing: false,
+  srcPath: '',
+  srcName: '',
+  sending: false,
+  error: '',
+  success: '',
+  logs: [] as string[],
+})
+
+async function openTransferDialog() {
+  const sid = activeSessionID.value
+  const st = activeFileState.value
+  if (!sid || !st || !st.selected) return
+  const entry = st.files.find((f) => f.Name === st.selected)
+  if (!entry) return
+
+  transfer.srcPath = entry.Path
+  transfer.srcName = entry.Name
+  transfer.targetConnID = ''
+  transfer.targetPath = '/'
+  transfer.targetDirs = []
+  transfer.error = ''
+  transfer.success = ''
+  transfer.sending = false
+  transfer.logs = []
+
+  try {
+    const conns = await ListConnections(false, '')
+    transfer.connections = conns
+    if (transfer.connections.length === 0) {
+      alert('没有可用的连接')
+      return
+    }
+    transfer.targetConnID = transfer.connections[0].ID
+    transfer.open = true
+  } catch (e: any) {
+    alert('获取连接列表失败: ' + (e?.message || e))
+  }
+}
+
+async function browseTargetDir(dir?: string) {
+  if (!transfer.targetConnID) return
+  transfer.browsing = true
+  transfer.error = ''
+  try {
+    const p = dir ?? transfer.targetPath
+    const dirs = await BrowseConnectionDir(transfer.targetConnID, p)
+    transfer.targetPath = p
+    transfer.targetDirs = dirs
+  } catch (e: any) {
+    transfer.error = '浏览目录失败: ' + (e?.message || e)
+  } finally {
+    transfer.browsing = false
+  }
+}
+
+function browseParent() {
+  const p = transfer.targetPath.replace(/\/$/, '') // 去掉末尾斜杠
+  if (!p || p === '/') return
+  const idx = p.lastIndexOf('/')
+  const parent = idx <= 0 ? '/' : p.slice(0, idx)
+  browseTargetDir(parent)
+}
+
+async function doTransfer() {
+  if (!transfer.targetConnID || transfer.sending) return
+  transfer.sending = true
+  transfer.error = ''
+  transfer.success = ''
+  transfer.logs = [`[开始] 传送 ${transfer.srcName} → ${transfer.targetPath}`]
+
+  const taskId = 'srv-' + Date.now()
+  const conn = transfer.connections.find((c: any) => c.ID === transfer.targetConnID)
+  const targetName = conn?.Name || conn?.Host || transfer.targetConnID
+  const task: TransferTask = {
+    id: taskId,
+    sessionID: activeSessionID.value,
+    kind: 'upload',
+    fileName: transfer.srcName,
+    source: transfer.srcPath,
+    dest: `${targetName}:${transfer.targetPath}`,
+    total: 0,
+    transferred: 0,
+    status: 'running',
+    error: '',
+    updatedAt: Date.now(),
+  }
+  transferTasks.unshift(task)
+  transferPanelOpen.value = true
+
+  try {
+    await TransferToConnection(
+      activeSessionID.value,
+      transfer.srcPath,
+      transfer.targetConnID,
+      transfer.targetPath,
+      taskId
+    )
+    transfer.logs.push(`[完成] 传送成功`)
+    transfer.success = `已传送 ${transfer.srcName} → ${transfer.targetPath}`
+    task.status = 'done'
+    task.updatedAt = Date.now()
+  } catch (e: any) {
+    const msg = e?.message || String(e)
+    transfer.logs.push(`[错误] ${msg}`)
+    transfer.error = msg
+    task.status = 'error'
+    task.error = msg
+    task.updatedAt = Date.now()
+  } finally {
+    transfer.sending = false
+  }
 }
 
 function saveDownloadDir(dir: string) {
@@ -625,15 +747,26 @@ async function navigateRemote(target: string) {
   await refreshRemoteFiles(sid)
 }
 
-async function onPathBarBlur(e: FocusEvent) {
-  const input = e.target as HTMLInputElement
-  const val = input.value.trim()
-  if (!val || !activeFileState.value) return
-  const target = val.startsWith('/') ? val : `/${val}`
-  if (target !== activeFileState.value.path) {
-    await navigateRemote(target)
+async function onPathBarKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter') {
+    e.preventDefault()
+    const input = e.target as HTMLInputElement
+    const val = input.value.trim()
+    if (!val || !activeFileState.value) return
+    const target = val.startsWith('/') ? val : `/${val}`
+    if (target !== activeFileState.value.path) {
+      const oldPath = activeFileState.value.path
+      activeFileState.value.path = target
+      activeFileState.value.selected = ''
+      try {
+        await refreshRemoteFiles()
+      } catch {
+        activeFileState.value.path = oldPath
+        await refreshRemoteFiles()
+      }
+    }
+    input.blur()
   }
-  input.value = activeFileState.value.path || '/'
 }
 
 async function openRemoteEntry(name: string) {
@@ -1218,6 +1351,24 @@ onMounted(async () => {
     if (ev && typeof ev === 'object') upsertTransfer(ev as Record<string, unknown>)
   })
 
+  EventsOn('transfer-log', (...args: unknown[]) => {
+    const msg = args[0]
+    if (typeof msg === 'string' && transfer.open) {
+      transfer.logs.push(msg)
+    }
+  })
+
+  EventsOn('srv-transfer-progress', (...args: unknown[]) => {
+    const ev = args[0] as any
+    if (!ev?.TaskID) return
+    const t = transferTasks.find((t) => t.id === ev.TaskID)
+    if (t) {
+      t.total = Number(ev.Total ?? 0)
+      t.transferred = Number(ev.Transferred ?? 0)
+      t.updatedAt = Date.now()
+    }
+  })
+
   await refreshList()
   loadRecents()
   loadEmptyGroups()
@@ -1438,14 +1589,14 @@ watch(activeSessionID, () => {
               <button class="ft-btn" type="button" @click="remoteMkdir">📁 新建文件夹</button>
               <button class="ft-btn" type="button" :disabled="!activeFileState.selected" @click="remoteDelete">🗑 删除</button>
               <button class="ft-btn" type="button" :disabled="!activeFileState.selected" @click="remoteRename">✏ 重命名</button>
+              <button class="ft-btn" type="button" :disabled="!activeFileState.selected" @click="openTransferDialog">📤 传送</button>
               <span class="ft-sep" />
               <span class="ft-tag">SFTP</span>
               <div class="path-bar">
                 <input
                   class="path-input"
                   :value="activeFileState.path || '/'"
-                  @keydown.enter="($event.target as HTMLInputElement).blur()"
-                  @blur="onPathBarBlur($event)"
+                  @keydown="onPathBarKeydown($event)"
                   @focus="($event.target as HTMLInputElement).select()"
                   spellcheck="false"
                 />
@@ -1524,6 +1675,61 @@ watch(activeSessionID, () => {
                     spellcheck="false"
                     wrap="off"
                   ></textarea>
+                </div>
+              </div>
+            </Teleport>
+
+            <!-- 传送弹窗 -->
+            <Teleport to="body">
+              <div v-if="transfer.open" class="editor-overlay" @click.self="transfer.open = false">
+                <div class="transfer-dialog">
+                  <div class="editor-header">
+                    <span class="editor-title">📤 传送文件到其他服务器</span>
+                    <button class="ft-btn editor-close-btn" @click="transfer.open = false">✕</button>
+                  </div>
+                  <div class="transfer-body">
+                    <div class="transfer-row">
+                      <label>源文件：</label>
+                      <span class="transfer-value">{{ transfer.srcPath }}</span>
+                    </div>
+                    <div class="transfer-row">
+                      <label>目标服务器：</label>
+                      <select v-model="transfer.targetConnID" class="transfer-select" @change="browseTargetDir('/')">
+                        <option value="" disabled>请选择…</option>
+                        <option v-for="c in transfer.connections" :key="c.ID" :value="c.ID">{{ c.Name || c.Host }}</option>
+                      </select>
+                    </div>
+                    <div class="transfer-row">
+                      <label>目标路径：</label>
+                      <div class="transfer-browser">
+                        <div class="transfer-path-bar">
+                          <button class="ft-btn" style="padding:0 6px" @click="browseParent" :disabled="transfer.targetPath==='/'">⬆</button>
+                          <span class="transfer-cur-path">{{ transfer.targetPath }}</span>
+                          <button class="ft-btn" style="padding:0 6px;margin-left:auto" @click="browseTargetDir()" :disabled="transfer.browsing">🔄</button>
+                        </div>
+                        <div class="transfer-dir-list" v-if="transfer.targetConnID">
+                          <div v-if="transfer.browsing" style="padding:8px;color:#888;">加载中…</div>
+                          <div v-else-if="transfer.targetDirs.length===0" style="padding:8px;color:#888;">（无子目录）</div>
+                          <div v-for="d in transfer.targetDirs" :key="d.Name"
+                               class="transfer-dir-item"
+                               @dblclick="browseTargetDir(transfer.targetPath==='/' ? '/'+d.Name : transfer.targetPath+'/'+d.Name)">
+                            📁 {{ d.Name }}
+                          </div>
+                        </div>
+                        <div v-else style="padding:8px;color:#888;">请先选择目标服务器</div>
+                      </div>
+                    </div>
+                    <div v-if="transfer.logs.length > 0" class="transfer-log-box">
+                      <div v-for="(line, i) in transfer.logs" :key="i" :class="['transfer-log-line', line.startsWith('[错误]') ? 'log-err' : line.startsWith('[完成]') ? 'log-ok' : '']">{{ line }}</div>
+                    </div>
+                    <div v-if="transfer.error && !transfer.logs.length" class="editor-error">{{ transfer.error }}</div>
+                    <div class="transfer-actions">
+                      <button class="ft-btn primary" :disabled="transfer.sending || !transfer.targetConnID" @click="doTransfer">
+                        {{ transfer.sending ? '传送中…' : '📤 开始传送' }}
+                      </button>
+                      <button class="ft-btn" @click="transfer.open = false">取消</button>
+                    </div>
+                  </div>
                 </div>
               </div>
             </Teleport>
@@ -2141,6 +2347,7 @@ df -h</textarea>
   padding: 8px 10px;
   margin-bottom: 8px;
   background: #fff;
+  color: #333;
 }
 .transfer-item.running { border-color: #bfdbfe; background: #f8fbff; }
 .transfer-item.done { border-color: #bbf7d0; background: #f0fdf4; }
@@ -2164,7 +2371,7 @@ df -h</textarea>
   flex: 1;
   font-size: var(--fs-sm);
   font-weight: 600;
-  color: var(--ui-text);
+  color: #111;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2173,7 +2380,7 @@ df -h</textarea>
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   font-weight: 700;
-  color: var(--ui-text-secondary);
+  color: #333;
   flex-shrink: 0;
 }
 .transfer-progress {
@@ -2193,7 +2400,7 @@ df -h</textarea>
 .transfer-progress-bar.download { background: linear-gradient(90deg, #4ade80, #16a34a); }
 .transfer-meta {
   font-size: var(--fs-xs);
-  color: var(--ui-text-muted);
+  color: #555;
   font-family: var(--font-mono);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3091,6 +3298,133 @@ df -h</textarea>
   color: #fff;
 }
 .btn-primary:hover { background: #1d4ed8; }
+
+.transfer-dialog {
+  width: 500px;
+  background: #fff;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  overflow: hidden;
+}
+.transfer-body {
+  padding: 20px;
+}
+.transfer-row {
+  display: flex;
+  align-items: center;
+  margin-bottom: 14px;
+  gap: 10px;
+}
+.transfer-row label {
+  width: 90px;
+  flex-shrink: 0;
+  font-size: var(--fs-sm);
+  color: #475569;
+  text-align: right;
+}
+.transfer-value {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  color: #1e293b;
+  word-break: break-all;
+}
+.transfer-select, .transfer-input {
+  flex: 1;
+  height: 32px;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  padding: 0 10px;
+  font-size: var(--fs-sm);
+  font-family: var(--font-mono);
+  outline: none;
+}
+.transfer-select:focus, .transfer-input:focus {
+  border-color: var(--ui-accent);
+}
+.transfer-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+.transfer-browser {
+  flex: 1;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+}
+.transfer-path-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: #f0f1f3;
+  border-bottom: 1px solid #e5e7eb;
+  font-size: 13px;
+}
+.transfer-path-bar .ft-btn {
+  color: #333;
+  background: #e5e7eb;
+  border-color: #d1d5db;
+}
+.transfer-cur-path {
+  color: #111;
+  font-weight: 600;
+}
+.transfer-dir-list {
+  max-height: 180px;
+  overflow-y: auto;
+}
+.transfer-dir-item {
+  padding: 5px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #111;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.transfer-dir-item:hover {
+  background: #dbeafe;
+}
+.transfer-log-box {
+  margin-top: 10px;
+  background: #1e1e2e;
+  border-radius: 6px;
+  padding: 8px 12px;
+  max-height: 120px;
+  overflow-y: auto;
+  font-family: monospace;
+  font-size: 12px;
+}
+.transfer-log-line {
+  color: #cdd6f4;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.transfer-log-line.log-ok { color: #a6e3a1; }
+.transfer-log-line.log-err { color: #f38ba8; }
+.transfer-actions .ft-btn {
+  color: #333;
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  min-width: 80px;
+}
+.transfer-actions .ft-btn.primary {
+  color: #fff;
+  background: #2563eb;
+  border-color: #2563eb;
+  min-width: 120px;
+}
+.transfer-success {
+  padding: 8px 12px;
+  background: #f0fdf4;
+  color: #16a34a;
+  border-radius: 5px;
+  font-size: var(--fs-sm);
+  margin-bottom: 10px;
+}
 
 .editor-overlay {
   position: fixed;

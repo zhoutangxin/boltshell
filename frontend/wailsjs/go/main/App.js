@@ -6,6 +6,10 @@ export function AddConnection(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
   return window['go']['main']['App']['AddConnection'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
 }
 
+export function BrowseConnectionDir(arg1, arg2) {
+  return window['go']['main']['App']['BrowseConnectionDir'](arg1, arg2);
+}
+
 export function CloseSession(arg1) {
   return window['go']['main']['App']['CloseSession'](arg1);
 }
@@ -20,6 +24,10 @@ export function GetRemoteHome(arg1) {
 
 export function GetSessionSysInfo(arg1) {
   return window['go']['main']['App']['GetSessionSysInfo'](arg1);
+}
+
+export function ListActiveSessions() {
+  return window['go']['main']['App']['ListActiveSessions']();
 }
 
 export function ListConnections(arg1, arg2) {
@@ -80,6 +88,14 @@ export function SetDeleted(arg1, arg2) {
 
 export function StartSession(arg1) {
   return window['go']['main']['App']['StartSession'](arg1);
+}
+
+export function TransferBetweenServers(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['TransferBetweenServers'](arg1, arg2, arg3, arg4);
+}
+
+export function TransferToConnection(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['TransferToConnection'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function UpdateConnection(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {

@@ -70,6 +70,30 @@ func joinRemote(dir, name string) string {
 
 const maxEditSize = 2 * 1024 * 1024 // 2MB
 
+// Stat 获取远端文件/目录信息
+func (c *Client) Stat(remotePath string) (os.FileInfo, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("sftp not ready")
+	}
+	return c.client.Stat(cleanRemotePath(remotePath))
+}
+
+// OpenRead 打开远端文件用于读取（调用方需 Close）
+func (c *Client) OpenRead(remotePath string) (io.ReadCloser, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("sftp not ready")
+	}
+	return c.client.Open(cleanRemotePath(remotePath))
+}
+
+// OpenWrite 打开远端文件用于写入（调用方需 Close）
+func (c *Client) OpenWrite(remotePath string) (io.WriteCloser, error) {
+	if c == nil || c.client == nil {
+		return nil, fmt.Errorf("sftp not ready")
+	}
+	return c.client.OpenFile(cleanRemotePath(remotePath), os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
+}
+
 // ReadFile 读取远端文件全部内容（限制大小，适用于在线编辑）
 func (c *Client) ReadFile(remotePath string) ([]byte, error) {
 	if c == nil || c.client == nil {

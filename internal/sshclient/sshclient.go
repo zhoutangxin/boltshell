@@ -214,6 +214,21 @@ func setRaw() func() { // 把当前控制台切换到 raw 模式，并返回恢�
 	return func() { _ = term.Restore(fd, oldState) } // 返回一个闭包，在需要时恢复原状态
 }
 
+// Dial 建立 SSH 连接并返回 *ssh.Client（调用方负责 Close）
+func Dial(host string, port int, user, pass string) (*ssh.Client, error) {
+	if host == "" || user == "" || pass == "" {
+		return nil, fmt.Errorf("参数不完整")
+	}
+	addr := fmt.Sprintf("%s:%d", host, portIfZero(port))
+	cfg := &ssh.ClientConfig{
+		User:            user,
+		Auth:            []ssh.AuthMethod{ssh.Password(pass)},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         10 * time.Second,
+	}
+	return dialSSH(addr, cfg)
+}
+
 func Connect(host string, port int, user, pass string) error { // 只测试是否能成功建立 SSH 连接
 	if host == "" || user == "" || pass == "" {
 		return fmt.Errorf("参数不完整")

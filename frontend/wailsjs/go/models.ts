@@ -35,6 +35,20 @@ export namespace db {
 
 export namespace main {
 	
+	export class SessionInfo {
+	    ID: string;
+	    Title: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new SessionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ID = source["ID"];
+	        this.Title = source["Title"];
+	    }
+	}
 	export class SysProcInfo {
 	    MemKB: number;
 	    CPUPct: number;

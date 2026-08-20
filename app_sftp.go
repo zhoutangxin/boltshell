@@ -2,13 +2,36 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"path"
 	"path/filepath"
 	"strings"
 
+	"shelllite/internal/db"
 	"shelllite/internal/sftpclient"
+	"shelllite/internal/sshclient"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+// SessionInfo 已连接会话的简要信息（供前端选择目标服务器）
+type SessionInfo struct {
+	ID    string `json:"ID"`
+	Title string `json:"Title"`
+}
+
+// ListActiveSessions 返回当前所有已连接的会话列表
+func (a *App) ListActiveSessions() []SessionInfo {
+	a.termMu.Lock()
+	defer a.termMu.Unlock()
+	out := make([]SessionInfo, 0, len(a.sessions))
+	for id, h := range a.sessions {
+		if h != nil && h.sftp != nil {
+			out = append(out, SessionInfo{ID: id, Title: h.title})
+		}
+	}
+	return out
+}
 
 func (a *App) getSFTP(sessionID string) (*sftpclient.Client, error) {
 	a.termMu.Lock()
@@ -85,6 +108,216 @@ func (a *App) WriteRemoteFile(sessionID string, remotePath string, content strin
 		return err
 	}
 	return c.WriteFile(remotePath, []byte(content))
+}
+
+// TransferBetweenServers 从源会话传输到目标会话（都已连接）
+func (a *App) TransferBetweenServers(srcSessionID string, srcPath string, dstSessionID string, dstDir string) error {
+	if srcSessionID == dstSessionID {
+		return fmt.Errorf("源和目标不能是同一个会话")
+	}
+	srcSFTP, err := a.getSFTP(srcSessionID)
+	if err != nil {
+		return fmt.Errorf("源服务器 SFTP 未就绪: %w", err)
+	}
+	dstSFTP, err := a.getSFTP(dstSessionID)
+	if err != nil {
+		return fmt.Errorf("目标服务器 SFTP 未就绪: %w", err)
+	}
+	return a.doTransfer(srcSFTP, dstSFTP, srcPath, dstDir)
+}
+
+// TransferToConnection 从源会话传输到目标连接（按连接 ID，临时建 SFTP）
+// taskID 由前端传入，用于推送进度
+func (a *App) TransferToConnection(srcSessionID string, srcPath string, dstConnID string, dstDir string, taskID string) error {
+	emit := func(msg string) {
+		runtime.EventsEmit(a.ctx, "transfer-log", msg)
+	}
+	emitProgress := func(total, transferred int64) {
+		runtime.EventsEmit(a.ctx, "srv-transfer-progress", map[string]interface{}{
+			"TaskID":      taskID,
+			"Total":       total,
+			"Transferred": transferred,
+		})
+	}
+
+	srcSFTP, err := a.getSFTP(srcSessionID)
+	if err != nil {
+		return fmt.Errorf("源服务器 SFTP 未就绪: %w", err)
+	}
+
+	conn, err := db.GetByID(a.db, dstConnID)
+	if err != nil {
+		return fmt.Errorf("找不到目标连接: %w", err)
+	}
+
+	emit(fmt.Sprintf("正在连接目标服务器 %s:%d …", conn.Host, conn.Port))
+	sshClient, err := sshclient.Dial(conn.Host, conn.Port, conn.User, conn.Password)
+	if err != nil {
+		return fmt.Errorf("连接目标服务器失败（%s:%d）: %w", conn.Host, conn.Port, err)
+	}
+	defer sshClient.Close()
+	emit(fmt.Sprintf("已连接 %s", conn.Host))
+
+	dstSFTP, err := sftpclient.NewFromSSH(sshClient)
+	if err != nil {
+		return fmt.Errorf("目标 SFTP 初始化失败: %w", err)
+	}
+	defer dstSFTP.Close()
+
+	// 先计算总大小
+	totalSize, _ := a.calcRemoteSize(srcSFTP, srcPath)
+	if totalSize > 0 {
+		emitProgress(totalSize, 0)
+	}
+
+	emit(fmt.Sprintf("开始传输 %s → %s", path.Base(srcPath), dstDir))
+	var transferred int64
+	err = a.doTransferWithLog(srcSFTP, dstSFTP, srcPath, dstDir, emit, func(n int64) {
+		transferred += n
+		emitProgress(totalSize, transferred)
+	})
+	if err != nil {
+		return err
+	}
+	emitProgress(totalSize, totalSize)
+	emit("传输完成 ✓")
+	return nil
+}
+
+func (a *App) calcRemoteSize(c *sftpclient.Client, remotePath string) (int64, error) {
+	info, err := c.Stat(remotePath)
+	if err != nil {
+		return 0, err
+	}
+	if !info.IsDir() {
+		return info.Size(), nil
+	}
+	entries, err := c.ListDir(remotePath)
+	if err != nil {
+		return 0, err
+	}
+	var total int64
+	for _, e := range entries {
+		if e.IsDir {
+			sub, _ := a.calcRemoteSize(c, e.Path)
+			total += sub
+		} else {
+			total += e.Size
+		}
+	}
+	return total, nil
+}
+
+// BrowseConnectionDir 临时连接目标服务器并列出指定目录（仅返回文件夹）
+func (a *App) BrowseConnectionDir(connID string, remotePath string) ([]sftpclient.RemoteEntry, error) {
+	conn, err := db.GetByID(a.db, connID)
+	if err != nil {
+		return nil, fmt.Errorf("找不到连接: %w", err)
+	}
+	sshClient, err := sshclient.Dial(conn.Host, conn.Port, conn.User, conn.Password)
+	if err != nil {
+		return nil, fmt.Errorf("连接失败（%s:%d）: %w", conn.Host, conn.Port, err)
+	}
+	defer sshClient.Close()
+
+	sc, err := sftpclient.NewFromSSH(sshClient)
+	if err != nil {
+		return nil, fmt.Errorf("SFTP 初始化失败: %w", err)
+	}
+	defer sc.Close()
+
+	entries, err := sc.ListDir(remotePath)
+	if err != nil {
+		return nil, err
+	}
+	// 只保留目录
+	dirs := make([]sftpclient.RemoteEntry, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir {
+			dirs = append(dirs, e)
+		}
+	}
+	return dirs, nil
+}
+
+type emitFn func(string)
+type progressFn func(int64)
+
+func noProgress(int64) {}
+
+func (a *App) doTransfer(srcSFTP, dstSFTP *sftpclient.Client, srcPath, dstDir string) error {
+	return a.doTransferWithLog(srcSFTP, dstSFTP, srcPath, dstDir, func(string) {}, noProgress)
+}
+
+func (a *App) doTransferWithLog(srcSFTP, dstSFTP *sftpclient.Client, srcPath, dstDir string, emit emitFn, onProgress progressFn) error {
+	info, err := srcSFTP.Stat(srcPath)
+	if err != nil {
+		return fmt.Errorf("无法访问源路径: %w", err)
+	}
+	baseName := path.Base(srcPath)
+	dstPath := path.Join(dstDir, baseName)
+	if info.IsDir() {
+		return a.transferDirBetween(srcSFTP, dstSFTP, srcPath, dstPath, emit, onProgress)
+	}
+	return a.transferFileBetween(srcSFTP, dstSFTP, srcPath, dstPath, emit, onProgress)
+}
+
+func (a *App) transferFileBetween(src, dst *sftpclient.Client, srcPath, dstPath string, emit emitFn, onProgress progressFn) error {
+	emit(fmt.Sprintf("  传文件 %s", path.Base(srcPath)))
+	reader, err := src.OpenRead(srcPath)
+	if err != nil {
+		return fmt.Errorf("读取源文件失败: %w", err)
+	}
+	defer reader.Close()
+
+	writer, err := dst.OpenWrite(dstPath)
+	if err != nil {
+		return fmt.Errorf("写入目标文件失败: %w", err)
+	}
+	defer writer.Close()
+
+	buf := make([]byte, 32*1024)
+	for {
+		n, readErr := reader.Read(buf)
+		if n > 0 {
+			if _, wErr := writer.Write(buf[:n]); wErr != nil {
+				return fmt.Errorf("传输失败: %w", wErr)
+			}
+			onProgress(int64(n))
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				break
+			}
+			return fmt.Errorf("传输失败: %w", readErr)
+		}
+	}
+	return nil
+}
+
+func (a *App) transferDirBetween(src, dst *sftpclient.Client, srcDir, dstDir string, emit emitFn, onProgress progressFn) error {
+	emit(fmt.Sprintf("  创建目录 %s", dstDir))
+	if err := dst.Mkdir(dstDir); err != nil {
+		// 目录可能已存在，忽略
+	}
+	entries, err := src.ListDir(srcDir)
+	if err != nil {
+		return fmt.Errorf("读取源目录失败: %w", err)
+	}
+	for _, e := range entries {
+		sp := e.Path
+		dp := path.Join(dstDir, e.Name)
+		if e.IsDir {
+			if err := a.transferDirBetween(src, dst, sp, dp, emit, onProgress); err != nil {
+				return err
+			}
+		} else {
+			if err := a.transferFileBetween(src, dst, sp, dp, emit, onProgress); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // PickLocalFile 选择本机文件（上传用）
