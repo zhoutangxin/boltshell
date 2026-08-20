@@ -1,4 +1,4 @@
-# BoltShell 跨平台打包：macOS（必须在 macOS runner）+ Windows
+# BoltShell 跨平台打包：macOS + Windows + Linux（各自在对应 runner 上构建）
 # 触发：打 tag v* 自动发 Release；或在 Actions 页手动 Run workflow
 
 name: Release Build
@@ -19,6 +19,10 @@ on:
           - darwin/universal
       build_windows:
         description: '是否同时打 Windows 包'
+        type: boolean
+        default: true
+      build_linux:
+        description: '是否同时打 Linux 包'
         type: boolean
         default: true
 
@@ -180,10 +184,94 @@ jobs:
           path: build/bin/BoltShell.exe
           if-no-files-found: error
 
+  build-linux:
+    name: Linux
+    if: github.ref_type == 'tag' || inputs.build_linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # Wails 桌面窗口在 Linux 上依赖 GTK 与 WebKitGTK
+      - name: Install Linux build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
+
+      - name: Add Go bin to PATH
+        run: echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Sync remote config embed
+        run: cp config/sponsors.remote.json internal/sponsors/remote.embed.json
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+          else
+            ver=$(grep 'var Version' internal/version/version.go | sed -n 's/.*"\([^"]*\)".*/\1/p')
+            echo "version=${ver}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        shell: bash
+        run: |
+          npm ci --no-audit --no-fund
+          test -f node_modules/vite/bin/vite.js
+
+      - name: Build frontend
+        working-directory: frontend
+        shell: bash
+        run: node ./node_modules/vite/bin/vite.js build
+
+      # runner 上只有 webkit2gtk-4.1，需要 webkit2_41 构建标签
+      - name: Build Linux binary
+        run: |
+          wails build -s -platform linux/amd64 -tags webkit2_41 \
+            -ldflags "-X boltshell/internal/version.Version=${{ steps.ver.outputs.version }}"
+
+      - name: Verify binary
+        shell: bash
+        run: |
+          bin=$(ls build/bin/BoltShell build/bin/boltshell 2>/dev/null | head -n1)
+          test -n "$bin"
+          chmod +x "$bin"
+          file "$bin"
+          echo "LINUX_BIN=$bin" >> "$GITHUB_ENV"
+
+      - name: Package tar.gz
+        shell: bash
+        run: |
+          cd build/bin
+          bin_name=$(basename "${{ env.LINUX_BIN }}")
+          tar -czf BoltShell-linux-amd64.tar.gz "$bin_name"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-amd64
+          path: build/bin/BoltShell-linux-amd64.tar.gz
+          if-no-files-found: error
+
   release:
     name: Create GitHub Release
     if: github.ref_type == 'tag'
-    needs: [build-macos, build-windows]
+    needs: [build-macos, build-windows, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
