@@ -79,12 +79,19 @@ export function useServerTransfer(
     await loadTransferTargetDir()
   }
 
+  function normalizeRemotePath(p: string) {
+    const trimmed = p.trim()
+    if (!trimmed) return '/'
+    const withRoot = trimmed.startsWith('/') ? trimmed : `/${trimmed}`
+    return withRoot.replace(/\/+/g, '/').replace(/\/$/, '') || '/'
+  }
+
   async function browseTargetDir(dir?: string) {
     if (!transfer.targetConnID) return
     transfer.browsing = true
     transfer.error = ''
     try {
-      const p = dir ?? transfer.targetPath
+      const p = normalizeRemotePath(dir ?? transfer.targetPath)
       transfer.targetDirs = await BrowseConnectionDir(transfer.targetConnID, p)
       transfer.targetPath = p
     } catch (e: unknown) {
@@ -161,6 +168,9 @@ export function useServerTransfer(
       t.total = total
       t.transferred = transferred
       t.updatedAt = Date.now()
+      if (total > 0 && transferred >= total && t.status === 'running') {
+        t.status = 'done'
+      }
     }
   }
 

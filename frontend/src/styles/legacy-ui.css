@@ -292,6 +292,7 @@
   gap: 2px;
   padding-right: 6px;
   flex-shrink: 0;
+  overflow: visible;
 }
 .tab-actions button {
   width: 26px;
@@ -304,24 +305,39 @@
   font-size: 13px;
 }
 .tab-actions button:hover { background: #d4dde8; }
-.tab-actions .transfer-toggle {
+.transfer-toggle-wrap {
   position: relative;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  overflow: visible;
+}
+.tab-actions .transfer-toggle {
+  width: 100%;
+  height: 100%;
   font-size: 14px;
   font-weight: 700;
+  line-height: 26px;
+  padding: 0;
 }
 .transfer-badge {
   position: absolute;
-  top: 2px;
-  right: 2px;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 7px;
-  background: #2563eb;
+  top: 0;
+  right: 0;
+  transform: translate(45%, -45%);
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: #ef4444;
   color: #fff;
   font-size: 10px;
-  line-height: 14px;
+  line-height: 16px;
   font-weight: 700;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--ui-bg);
+  pointer-events: none;
+  z-index: 3;
 }
 
 /* 右侧文件传输面板 */
@@ -489,6 +505,7 @@
   justify-content: flex-start;
   border-bottom: 1px solid var(--ui-border);
   flex-shrink: 0;
+  overflow: visible;
 }
 
 .tabs {
@@ -1565,6 +1582,17 @@
   background: #f0f1f3;
   border-bottom: 1px solid #e5e7eb;
   font-size: 13px;
+}
+.transfer-path-input {
+  flex: 1;
+  min-width: 0;
+  height: 28px;
+}
+.transfer-go-btn,
+.transfer-refresh-btn {
+  flex-shrink: 0;
+  padding: 0 8px !important;
+  height: 28px;
 }
 .transfer-path-bar .ft-btn {
   color: #333;

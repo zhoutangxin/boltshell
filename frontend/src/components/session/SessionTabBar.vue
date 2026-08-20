@@ -35,10 +35,12 @@ defineEmits<{
       </button>
     </div>
     <div v-if="sessions.length" class="tab-actions">
-      <button type="button" title="文件传输" class="transfer-toggle" @click="$emit('toggle-transfer')">
-        ⇅
-        <span v-if="activeTransferCount" class="transfer-badge">{{ activeTransferCount }}</span>
-      </button>
+      <div class="transfer-toggle-wrap">
+        <button type="button" title="文件传输" class="transfer-toggle" @click="$emit('toggle-transfer')">
+          ⇅
+        </button>
+        <span v-if="activeTransferCount" class="transfer-badge">{{ activeTransferCount > 99 ? '99+' : activeTransferCount }}</span>
+      </div>
       <button type="button" title="折叠系统信息" @click="$emit('toggle-sys')">◧</button>
       <button type="button" title="折叠文件面板" @click="$emit('toggle-file')">▤</button>
     </div>

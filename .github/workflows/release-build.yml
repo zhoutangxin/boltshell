@@ -40,6 +40,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
@@ -77,15 +79,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         shell: bash
-        env:
-          NODE_ENV: development
-          NPM_CONFIG_PRODUCTION: "false"
         run: |
-          npm ci --include=dev --no-audit --no-fund
-          if [ ! -f node_modules/vite/bin/vite.js ]; then
-            echo "vite missing after npm ci, retry with npm install"
-            npm install --include=dev --no-audit --no-fund
-          fi
+          set -euo pipefail
+          rm -rf node_modules
+          npm install --no-audit --no-fund
           test -f node_modules/vite/bin/vite.js
 
       - name: Build frontend
@@ -129,6 +126,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install Wails CLI
         run: go install github.com/wailsapp/wails/v2/cmd/wails@${{ env.WAILS_VERSION }}
@@ -155,15 +154,10 @@ jobs:
       - name: Install frontend dependencies
         working-directory: frontend
         shell: bash
-        env:
-          NODE_ENV: development
-          NPM_CONFIG_PRODUCTION: "false"
         run: |
-          npm ci --include=dev --no-audit --no-fund
-          if [ ! -f node_modules/vite/bin/vite.js ]; then
-            echo "vite missing after npm ci, retry with npm install"
-            npm install --include=dev --no-audit --no-fund
-          fi
+          set -euo pipefail
+          rm -rf node_modules
+          npm install --no-audit --no-fund
           test -f node_modules/vite/bin/vite.js
 
       - name: Build frontend

@@ -387,6 +387,7 @@ watch(activeSessionID, () => {
           @update:path-input-draft="pathInputDraft = $event"
           @update:editor-content="editor.content = $event"
           @update:target-conn-id="serverTransfer.targetConnID = $event"
+          @update:target-path="serverTransfer.targetPath = $event"
           @split-drag="startSplitDrag"
           @go-up="remoteGoUp"
           @refresh="refreshRemoteFiles()"

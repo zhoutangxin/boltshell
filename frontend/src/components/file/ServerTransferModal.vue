@@ -18,6 +18,7 @@ defineProps<{
 defineEmits<{
   (e: 'close'): void
   (e: 'update:targetConnId', v: string): void
+  (e: 'update:targetPath', v: string): void
   (e: 'target-change'): void
   (e: 'browse', dir?: string): void
   (e: 'browse-parent'): void
@@ -54,8 +55,22 @@ defineEmits<{
             <div class="transfer-browser">
               <div class="transfer-path-bar">
                 <button class="ft-btn" style="padding:0 6px" :disabled="targetPath === '/'" @click="$emit('browse-parent')">⬆</button>
-                <span class="transfer-cur-path">{{ targetPath }}</span>
-                <button class="ft-btn" style="padding:0 6px;margin-left:auto" :disabled="browsing" @click="$emit('browse')">🔄</button>
+                <input
+                  class="transfer-input transfer-path-input"
+                  :value="targetPath"
+                  spellcheck="false"
+                  placeholder="/path/to/dir"
+                  :disabled="!targetConnId || browsing || sending"
+                  @input="$emit('update:targetPath', ($event.target as HTMLInputElement).value)"
+                  @keydown.enter="$emit('browse', targetPath)"
+                />
+                <button
+                  class="ft-btn transfer-go-btn"
+                  type="button"
+                  :disabled="!targetConnId || browsing || sending"
+                  @click="$emit('browse', targetPath)"
+                >前往</button>
+                <button class="ft-btn transfer-refresh-btn" type="button" :disabled="browsing || !targetConnId" @click="$emit('browse')">🔄</button>
               </div>
               <div v-if="targetConnId" class="transfer-dir-list">
                 <div v-if="browsing" style="padding:8px;color:#888;">加载中…</div>

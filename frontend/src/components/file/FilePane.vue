@@ -42,6 +42,7 @@ defineEmits<{
   (e: 'update:pathInputDraft', v: string): void
   (e: 'update:editorContent', v: string): void
   (e: 'update:targetConnId', v: string): void
+  (e: 'update:targetPath', v: string): void
   (e: 'split-drag', ev: MouseEvent): void
   (e: 'go-up'): void
   (e: 'refresh'): void
@@ -175,6 +176,7 @@ defineEmits<{
           :logs="serverTransfer.logs"
           @close="$emit('close-transfer')"
           @update:target-conn-id="$emit('update:targetConnId', $event)"
+          @update:target-path="$emit('update:targetPath', $event)"
           @target-change="$emit('transfer-target-change')"
           @browse="$emit('browse-target', $event)"
           @browse-parent="$emit('browse-parent')"
