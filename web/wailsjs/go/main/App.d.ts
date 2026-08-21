@@ -27,9 +27,15 @@ export function DownloadFromRemote(arg1:string,arg2:string,arg3:string):Promise<
 
 export function ExportConnections(arg1:Array<string>):Promise<string>;
 
+export function FlushAnalytics():Promise<void>;
+
+export function GetAnalyticsEnabled():Promise<boolean>;
+
 export function GetAppVersion():Promise<string>;
 
 export function GetConnectionHome(arg1:string):Promise<string>;
+
+export function GetInstallID():Promise<string>;
 
 export function GetRemoteHome(arg1:string):Promise<string>;
 
@@ -79,9 +85,13 @@ export function ResizeSession(arg1:string,arg2:number,arg3:number):Promise<void>
 
 export function SendSessionInput(arg1:string,arg2:string):Promise<void>;
 
+export function SetAnalyticsEnabled(arg1:boolean):Promise<void>;
+
 export function SetDeleted(arg1:string,arg2:boolean):Promise<void>;
 
 export function StartSession(arg1:string):Promise<string>;
+
+export function TrackSponsorEvent(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number):Promise<void>;
 
 export function TransferBetweenServers(arg1:string,arg2:string,arg3:string,arg4:string):Promise<void>;
 

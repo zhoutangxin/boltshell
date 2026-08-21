@@ -29,7 +29,10 @@
 {
   "remoteURL": "http://example.com/config/sponsors.json",
   "releaseURL": "http://example.com/config/release.json",
-  "proUpgradeURL": "http://example.com/#pricing"
+  "proUpgradeURL": "http://example.com/#pricing",
+  "analyticsURL": "http://example.com/api/v1/analytics/events",
+  "analyticsAppKey": "boltshell-desktop",
+  "analyticsAppSecret": "change-me"
 }
 ```
 
@@ -38,6 +41,9 @@
 | `remoteURL` | 远程赞助配置 JSON 地址（广告/赞助位内容） |
 | `releaseURL` | 远程升级信息 JSON 地址（客户端 `CheckForUpdate`） |
 | `proUpgradeURL` | Pro 升级/购买页；赞助位里也可单独配 `proUpgradeUrl` |
+| `analyticsURL` | 匿名统计批量上报地址（`POST /api/v1/analytics/events`） |
+| `analyticsAppKey` | 统计 AppKey（可进包） |
+| `analyticsAppSecret` | HMAC 密钥（进包；仅防君子 + 服务端限流） |
 
 ### 加载顺序
 

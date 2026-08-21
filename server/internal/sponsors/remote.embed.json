@@ -1,5 +1,8 @@
 {
   "remoteURL": "http://47.108.138.168/config/sponsors.json",
   "releaseURL": "http://47.108.138.168/config/release.json",
-  "proUpgradeURL": "http://47.108.138.168/#pricing"
+  "proUpgradeURL": "http://127.0.0.1:8888/#pricing",
+  "analyticsURL": "http://127.0.0.1:8888/api/v1/analytics/events",
+  "analyticsAppKey": "boltshell-desktop",
+  "analyticsAppSecret": "boltshell-dev-secret-change-me"
 }

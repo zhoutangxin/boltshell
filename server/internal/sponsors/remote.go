@@ -16,9 +16,12 @@ var embeddedRemoteConfig []byte
 const defaultBaseURL = "http://47.108.138.168"
 
 type RemoteConfig struct {
-	RemoteURL     string `json:"remoteURL"`
-	ReleaseURL    string `json:"releaseURL"`
-	ProUpgradeURL string `json:"proUpgradeURL"`
+	RemoteURL          string `json:"remoteURL"`
+	ReleaseURL         string `json:"releaseURL"`
+	ProUpgradeURL      string `json:"proUpgradeURL"`
+	AnalyticsURL       string `json:"analyticsURL"`
+	AnalyticsAppKey    string `json:"analyticsAppKey"`
+	AnalyticsAppSecret string `json:"analyticsAppSecret"`
 }
 
 // RemoteConfigSearchPaths 查找 sponsors.remote.json（exe 旁 config/ 可覆盖内置）
@@ -89,14 +92,26 @@ func loadRemoteConfigBytes(b []byte) RemoteConfig {
 }
 
 func isRemoteConfigValid(c RemoteConfig) bool {
-	return c.RemoteURL != "" || c.ReleaseURL != "" || c.ProUpgradeURL != ""
+	return c.RemoteURL != "" || c.ReleaseURL != "" || c.ProUpgradeURL != "" || c.AnalyticsURL != ""
 }
 
 func normalizeRemoteConfig(c *RemoteConfig) {
 	c.RemoteURL = strings.TrimSpace(c.RemoteURL)
 	c.ReleaseURL = strings.TrimSpace(c.ReleaseURL)
 	c.ProUpgradeURL = strings.TrimSpace(c.ProUpgradeURL)
+	c.AnalyticsURL = strings.TrimSpace(c.AnalyticsURL)
+	c.AnalyticsAppKey = strings.TrimSpace(c.AnalyticsAppKey)
+	c.AnalyticsAppSecret = strings.TrimSpace(c.AnalyticsAppSecret)
 	if c.ProUpgradeURL == "" {
 		c.ProUpgradeURL = defaultBaseURL + "/#pricing"
+	}
+	if c.AnalyticsURL == "" && (c.RemoteURL != "" || c.ReleaseURL != "") {
+		c.AnalyticsURL = defaultBaseURL + "/api/v1/analytics/events"
+	}
+	if c.AnalyticsAppKey == "" {
+		c.AnalyticsAppKey = "boltshell-desktop"
+	}
+	if c.AnalyticsAppSecret == "" {
+		c.AnalyticsAppSecret = "boltshell-dev-secret-change-me"
 	}
 }

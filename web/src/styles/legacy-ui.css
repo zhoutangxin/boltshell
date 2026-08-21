@@ -58,6 +58,27 @@
 .btn-conn-mgr:hover { background: #d4dde8; }
 .btn-conn-mgr.active { background: #c5d5e8; }
 
+.btn-analytics {
+  flex-shrink: 0;
+  width: 40px;
+  height: 32px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-top: 1px solid var(--ui-border);
+  background: #e8eef4;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-analytics.on {
+  color: #0f766e;
+}
+.btn-analytics:hover {
+  background: #dce6f0;
+}
+
 .btn-upgrade {
   position: relative;
   flex-shrink: 0;

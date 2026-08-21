@@ -1,4 +1,4 @@
-<!-- 最左侧导航栏：连接管理器 + 底部升级入口 -->
+<!-- 最左侧导航栏：连接管理器 + 匿名统计开关 + 底部升级入口 -->
 <script setup lang="ts">
 import { computed } from 'vue'
 
@@ -9,11 +9,13 @@ const props = defineProps<{
   latestVersion?: string
   upgrading?: boolean
   upgradeStatus?: string
+  analyticsEnabled?: boolean
 }>()
 
 defineEmits<{
   (e: 'open-mgr'): void
   (e: 'upgrade'): void
+  (e: 'toggle-analytics'): void
 }>()
 
 const upgradeTitle = computed(() => {
@@ -21,6 +23,12 @@ const upgradeTitle = computed(() => {
   if (props.hasUpdate) return `发现新版本 v${props.latestVersion ?? ''}，点击升级`
   return `检查更新 · 当前 v${props.currentVersion ?? '?'}`
 })
+
+const analyticsTitle = computed(() =>
+  props.analyticsEnabled
+    ? '匿名统计：已开启（不上报 SSH 主机/命令，点击可关闭）'
+    : '匿名统计：已关闭（点击可开启，帮助改进产品）',
+)
 </script>
 
 <template>
@@ -35,6 +43,16 @@ const upgradeTitle = computed(() => {
     </button>
 
     <div class="left-rail-spacer" />
+
+    <button
+      type="button"
+      class="btn-analytics"
+      :class="{ on: analyticsEnabled }"
+      :title="analyticsTitle"
+      @click="$emit('toggle-analytics')"
+    >
+      {{ analyticsEnabled ? '统' : '静' }}
+    </button>
 
     <button
       type="button"

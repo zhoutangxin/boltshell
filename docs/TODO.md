@@ -1,36 +1,59 @@
 # BoltShell 开发 TODO
 
-> 更新时间：2026-08-20
+> 更新时间：2026-08-21  
+> 优先级权威说明：[business/BoltShell_产品亮点与竞品对比.md](business/BoltShell_产品亮点与竞品对比.md) §五～§七
 
 ---
 
-## 安全与认证
+## 安全与认证（P0）
 
-- [ ] **SSH 密钥登录**：支持 `IdentityFile`、OpenSSH 格式私钥、ssh-agent（v1.5+ 计划）
-- [ ] **密码存储加密**：SQLite 中密码字段 AES-256-GCM 加密，主密钥存 OS Keychain（见下方说明）
+- [ ] **SSH 密钥登录**：IdentityFile、OpenSSH 私钥、ssh-agent（**要做**）
+- [ ] **密码存储加密**：SQLite 字段 AES-256-GCM + 主密钥 OS Keychain（继续用 SQLite 即可）
+- [ ] HostKey / known_hosts（勿长期 InsecureIgnoreHostKey）
 
 ---
 
 ## 已完成
 
-- [x] 删除遗留 Gio GUI（`internal/gui/gioapp.go`）
-- [x] `BrowseConnectionDir` 连接池：同一目标服务器 60 秒内复用 SSH 连接（`app_browse_pool.go`）
+- [x] 删除遗留 Gio GUI
+- [x] `BrowseConnectionDir` 连接池
+- [x] 跨服务器文件传送 + 终端/SFTP/监控一体（**宣传主卖点**）
+- [x] 赞助位 UI + 匿名统计埋点骨架
+- [x] 编辑连接「密码可见」切换（体验加分，非安全卖点）
 
 ---
 
-## 商业化（见 [business/BoltShell_商业化与开源策略.md](business/BoltShell_商业化与开源策略.md)）
+## 商业化
 
-- [ ] License 模块（free / pro / team）
-- [ ] 免费版连接数上限
-- [ ] Pro 购买与去广告
+- [ ] License：free / supporter / pro（**Pro 不去赞助**）
+- [ ] 支持者 / Pro 买断收款（忌 ¥1/月）
+- [ ] 赞助：Pro 仍可见；可 dismiss
+- [ ] 官网：抓包示例 + 隐私 + 统计子域可屏蔽
+- [ ] **至少 2～3 个 Pro 真功能落地后再上架 Pro**
 
 ---
 
 ## 功能
 
-- [ ] 批量命令 Tab（多机执行）
-- [ ] 从 Xshell / FinalShell 导入配置
-- [ ] `bolt` CLI 命令行
+### P0
+
+- [ ] FinalShell 一键导入（现有导入 ≠ 竞品导入）
+- [ ] （安全三项见上）
+
+### P1（可作 Pro）
+
+- [ ] Xshell 导入
+- [ ] Snippets / 命令片段
+- [ ] 会话日志录制
+- [ ] 分屏
+- [ ] 端口转发 / 隧道
+- [ ] 批量命令 Tab
+- [ ] `bolt` CLI
+- [ ] 「查看我上报的数据」
+
+### P2
+
+- [ ] 云 Sync、Team 审计（有单再做）
 
 ---
 
@@ -38,12 +61,8 @@
 
 | 方案 | 说明 | 推荐阶段 |
 |------|------|----------|
-| **OS Keychain** | 密码不存 SQLite，存系统凭据库 | Pro / 正式版 |
-| **AES-256-GCM + Keychain 主密钥** | DB 加密，密钥由系统保管 | 过渡方案 |
-| **明文 SQLite** | 当前实现 | 仅开发/内网 |
+| **OS Keychain + AES 字段** | 密码密文存 SQLite，主密钥在系统凭据库 | **P0** |
+| SQLCipher 整库 | 亦可 | 可选 |
+| 明文 SQLite | 当前若仍如此 | 仅开发 |
 
-Keychain 平台对应：
-
-- Windows → Credential Manager（`wincred` / `github.com/danieljoos/wincred`）
-- macOS → Keychain（`github.com/keybase/go-keychain`）
-- Linux → Secret Service（`github.com/99designs/keyring`）
+平台：Windows Credential Manager / macOS Keychain / Linux Secret Service。

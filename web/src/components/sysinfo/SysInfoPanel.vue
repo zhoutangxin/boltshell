@@ -13,6 +13,8 @@ defineProps<{
   diskPercent: number
   sidebarSlots?: SponsorSlot[]
   proUpgradeUrl?: string
+  surfaceSession?: string
+  configVersion?: number
 }>()
 
 defineEmits<{
@@ -83,6 +85,8 @@ defineEmits<{
         :slot="s"
         variant="compact"
         :pro-upgrade-url="proUpgradeUrl"
+        :surface-session="surfaceSession"
+        :config-version="configVersion"
         @dismiss="(id, days) => $emit('dismiss-sponsor', id, days)"
       />
     </div>

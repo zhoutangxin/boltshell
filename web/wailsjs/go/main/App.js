@@ -46,12 +46,24 @@ export function ExportConnections(arg1) {
   return window['go']['main']['App']['ExportConnections'](arg1);
 }
 
+export function FlushAnalytics() {
+  return window['go']['main']['App']['FlushAnalytics']();
+}
+
+export function GetAnalyticsEnabled() {
+  return window['go']['main']['App']['GetAnalyticsEnabled']();
+}
+
 export function GetAppVersion() {
   return window['go']['main']['App']['GetAppVersion']();
 }
 
 export function GetConnectionHome(arg1) {
   return window['go']['main']['App']['GetConnectionHome'](arg1);
+}
+
+export function GetInstallID() {
+  return window['go']['main']['App']['GetInstallID']();
 }
 
 export function GetRemoteHome(arg1) {
@@ -150,12 +162,20 @@ export function SendSessionInput(arg1, arg2) {
   return window['go']['main']['App']['SendSessionInput'](arg1, arg2);
 }
 
+export function SetAnalyticsEnabled(arg1) {
+  return window['go']['main']['App']['SetAnalyticsEnabled'](arg1);
+}
+
 export function SetDeleted(arg1, arg2) {
   return window['go']['main']['App']['SetDeleted'](arg1, arg2);
 }
 
 export function StartSession(arg1) {
   return window['go']['main']['App']['StartSession'](arg1);
+}
+
+export function TrackSponsorEvent(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['TrackSponsorEvent'](arg1, arg2, arg3, arg4, arg5);
 }
 
 export function TransferBetweenServers(arg1, arg2, arg3, arg4) {

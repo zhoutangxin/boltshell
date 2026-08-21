@@ -1,5 +1,6 @@
 <!-- 未连接时的快速连接列表 + 底部赞助 Banner -->
 <script setup lang="ts">
+import { onMounted, ref } from 'vue'
 import SponsorBanner from '../sponsor/SponsorBanner.vue'
 import type { Connection } from '../../types'
 import type { SponsorSlot } from '../../types/sponsors'
@@ -11,6 +12,7 @@ defineProps<{
   groupName: (c: Connection) => string
   sponsorSlot?: SponsorSlot
   proUpgradeUrl?: string
+  configVersion?: number
 }>()
 
 defineEmits<{
@@ -19,6 +21,11 @@ defineEmits<{
   (e: 'clear-recents'): void
   (e: 'dismiss-sponsor', slotID: string, days: number): void
 }>()
+
+const surfaceSession = ref(`qc-${Date.now()}`)
+onMounted(() => {
+  surfaceSession.value = `qc-${Date.now()}`
+})
 </script>
 
 <template>
@@ -50,6 +57,8 @@ defineEmits<{
         :slot="sponsorSlot"
         variant="banner"
         :pro-upgrade-url="proUpgradeUrl"
+        :surface-session="surfaceSession"
+        :config-version="configVersion"
         @dismiss="(id, days) => $emit('dismiss-sponsor', id, days)"
       />
     </div>

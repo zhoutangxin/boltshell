@@ -106,6 +106,19 @@ func (a *App) DismissSponsorSlot(slotID string, days int) error {
 	if days <= 0 {
 		days = 7
 	}
+	linkURL := ""
+	cfgVer := 0
+	if a.sponsorClient != nil {
+		if cfg, err := a.sponsorClient.Load(false); err == nil {
+			cfgVer = cfg.Version
+			if slot, ok := cfg.Slots[slotID]; ok {
+				linkURL = slot.LinkURL
+			}
+		}
+	}
+	if a.analytics != nil {
+		a.analytics.TrackSponsor("dismiss", slotID, "dismiss", linkURL, cfgVer)
+	}
 	return a.sponsorDismiss.Dismiss(slotID, days)
 }
 

@@ -21,6 +21,7 @@ import (
 	"unicode/utf8"
 
 	"golang.org/x/text/encoding/simplifiedchinese"
+	"boltshell/internal/analytics"
 	"boltshell/internal/appdata"
 	"boltshell/internal/config"
 	"boltshell/internal/db"
@@ -54,6 +55,7 @@ type App struct {
 	sponsorDismiss   *sponsors.DismissStore
 	updaterClient    *updater.Client
 	proLicensedDev   bool
+	analytics        *analytics.Client
 }
 
 func NewApp() *App {
@@ -132,9 +134,16 @@ func (a *App) initBackend() error {
 	a.sponsorLocalPath = resolveSponsorLocalPath(exeDir)
 	a.updaterClient = updater.NewClient(a.remoteConfig.ReleaseURL)
 	a.proLicensedDev = cfg.ProLicensed
+	a.initAnalytics()
 
 	a.logger.Info("BoltShell (wails) backend init ok")
 	return nil
+}
+
+func (a *App) shutdown(ctx context.Context) {
+	if a.analytics != nil {
+		a.analytics.Stop()
+	}
 }
 
 func firstNonEmptyFromConfigEnv(cfg config.Config) string {
@@ -275,6 +284,10 @@ func (a *App) StartSession(connID string) (string, error) {
 	}
 	a.sessions[sid] = h
 	a.termMu.Unlock()
+
+	if a.analytics != nil {
+		a.analytics.TrackSSHConnected()
+	}
 
 	if a.logger != nil {
 		a.logger.Info("session started id=%s host=%s:%d", sid, c.Host, c.Port)

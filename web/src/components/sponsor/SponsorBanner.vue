@@ -1,21 +1,46 @@
 <!-- 可配置赞助位：banner（快速连接底）/ compact（侧栏） -->
 <script setup lang="ts">
+import { onMounted } from 'vue'
 import { BrowserOpenURL } from '../../../wailsjs/runtime/runtime'
+import { TrackSponsorEvent } from '../../../wailsjs/go/main/App.js'
 import type { SponsorSlot } from '../../types/sponsors'
 
 const props = defineProps<{
   slot: SponsorSlot
   variant: 'banner' | 'compact'
   proUpgradeUrl?: string
+  /** 同一 UI 态去重键，如 qc-<mountId> / sb-<sessionId> */
+  surfaceSession?: string
+  configVersion?: number
 }>()
 
 const emit = defineEmits<{
   (e: 'dismiss', slotID: string, days: number): void
 }>()
 
+onMounted(() => {
+  const surface = props.surfaceSession || props.variant
+  void TrackSponsorEvent(
+    'impression',
+    props.slot.SlotID,
+    surface,
+    props.slot.linkUrl || '',
+    props.configVersion ?? 0,
+  )
+})
+
 function openLink() {
   const url = props.slot.linkUrl?.trim()
+  const surface = props.surfaceSession || props.variant
+  // 先开外链，埋点异步；避免 TrackSponsorEvent 卡住导致「点了没反应」
   if (url) BrowserOpenURL(url)
+  void TrackSponsorEvent(
+    'click',
+    props.slot.SlotID,
+    surface,
+    url || '',
+    props.configVersion ?? 0,
+  ).catch(() => {})
 }
 
 function onDismiss(ev: MouseEvent) {

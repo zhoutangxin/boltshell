@@ -1,6 +1,6 @@
 # BoltShell 客户端赞助数据：设计与统计方案
 
-> 配套文档：[广告术语与指标说明](BoltShell_广告术语与指标说明.md) · [赞助位配置说明](BoltShell_赞助位配置说明.md)  
+> 配套文档：[广告术语与指标说明](BoltShell_广告术语与指标说明.md) · [赞助位配置说明](BoltShell_赞助位配置说明.md) · [开源许可证详解与选型](BoltShell_开源许可证详解与选型.md) · [竞品变现与广告风险调研](BoltShell_竞品变现与广告风险调研.md) · [个人开发者商业化 FAQ](BoltShell_个人开发者商业化FAQ.md)  
 > 目标：在 SSH 客户端里把 DAU / MAU / 曝光 / 点击等指标 **可采集、可汇总、可报给甲方**，且不碰敏感运维数据。
 
 ---
@@ -89,9 +89,53 @@ SSH 工具信任成本高，统计只允许「产品使用元数据」，不允�
 - 隐私说明写清：不上报服务器连接信息；仅统计启动与赞助位互动。
 - Pro 用户：可不报赞助事件（本来不展示）；`app_launch` 仍可报以便算全体 MAU，对外报赞助时再筛 `isPro=false`。
 
+### 3.1 「静默上报」是什么意思？为什么要避免
+
+| 坏做法 | 含义 |
+|--------|------|
+| **静默上报** | 后台一直 POST，设置找不到、首次启动也不提示 |
+| **没有开关** | 用户无法关闭 |
+| **隐私政策找不到** | 官网/关于页没有「我们传什么」 |
+
+这三样叠加 = 「偷偷监视」。**有 HTTPS 请求本身不是原罪**（Navicat、JetBrains、FinalShell 云同步也会连自家服），伤信任的是**没说清 + 不可验证**。
+
+商业软件常连自家服务器做更新 / License；赞助统计也属于「接口通讯」，但必须讲清：v1 **只**传启动与赞助元数据，**不**用上报抓未付费（抓未付费若要做，应走离线 License）。详见 [个人开发者商业化 FAQ](BoltShell_个人开发者商业化FAQ.md)。
+
+### 3.2 代码位置（便于官网写「可审计」）
+
+| 路径 | 作用 |
+|------|------|
+| `server/app_analytics.go` | `TrackSponsorEvent` / 开关 / Flush / InstallID |
+| `server/internal/analytics/` | 本地队列、批量 POST |
+| `web/src/components/sponsor/SponsorBanner.vue` | 曝光 / 点击触发 |
+| 本机 `%LOCALAPPDATA%\BoltShell\` | `analytics.queue`、`install.id`、`analytics.prefs.json` |
+
+### 3.3 官网应提供「抓包示例」页
+
+建议独立页（如 `/privacy` 或 `/telemetry`）：
+
+1. 字段白名单 + **真实 JSON 样例**（见 §5.2 / §5.3）  
+2. 永不上传清单（主机 / IP / 命令 / 密码…）  
+3. Wireshark / mitmproxy 指向统计子域的步骤  
+4. 设置关闭 + hosts 屏蔽方法（§3.4）  
+5. 「查看我上报的数据」→ 打开本地 `analytics.queue`
+
+### 3.4 独立子域 + 主动告知屏蔽（会少样本，但更划算）
+
+推荐统计走独立子域，例如 `https://t.boltshell.com/api/v1/analytics/events`（与官网静态、赞助 JSON 分离）。
+
+关于页写明：
+
+> 可在设置中关闭匿名统计，或在 hosts 屏蔽 `t.boltshell.com`。  
+> **关闭后 SSH / SFTP / 监控 / 跨机传送不受影响。**
+
+**会不会因此少收益？** 会少一部分上报率（敏感用户关掉），但：
+
+- 关掉的人往往是最爱发帖的；硬采 → 一张「偷偷上报」截图顶掉整月推广；  
+- 早期赞助用 **CPT 包月 + UTM 自核**，不依赖 100% 埋点保量；  
+- 公式：`赞助收入 ≈ 真实活跃 × 信任 × 续约`，不是 `强制上报率`。
+
 ---
-
-
 
 ## 四、身份：用什么做「一个人」
 
@@ -539,4 +583,312 @@ sidebar_1 月曝光 ≈ 免费 MAU × 人均连接天数 × 每天侧栏曝光�
 
 ---
 
-*文档结束。**带赞助位的正式包发布前，必须完成 P0+P1**；服务端可简陋，客户端埋点不能缺。*
+## 十四、本地开发：配置、建表与逐场景验证
+
+> 目标：在本机同时跑客户端 + `boltshell-server`，把埋点链路跑通。  
+> **不必手写建表 SQL**（见 §14.1）；验证时 **不要指望 WebView DevTools → Network** 能看到统计 POST（上报由 Go 发出）。
+
+### 14.1 要不要手动创建数据库表？
+
+| 情况 | 要不要手动建表 |
+|------|----------------|
+| 默认本地开发（SQLite + `disable-auto-migrate: false`） | **不用**。服务端启动时 GORM `AutoMigrate` 会创建/补齐：`bs_analytics_events`、`bs_daily_install_active`、`bs_daily_slot_stats` |
+| 已有库、只是刚拉了带统计的代码 | **不用**。重启服务端即可自动加表 |
+| 生产环境关闭了自动迁移（`disable-auto-migrate: true`） | **要**。执行 `boltshell-server/server/sql/bs_analytics.sql` |
+| 想对照字段 | 可看上述 SQL 文件，仅作文档/手工迁移参考 |
+
+主键均为 **字符串 UUID**，状态类字段如 `is_pro` 用字符串 `true`/`false`。
+
+### 14.2 配置文件在哪（本地默认）
+
+| 角色 | 文件 | 关键项 |
+|------|------|--------|
+| 客户端上报地址 | `boltshell/server/config/sponsors.remote.json` | `analyticsURL` → `http://127.0.0.1:8888/api/v1/analytics/events`；`analyticsAppKey` / `analyticsAppSecret` |
+| 客户端内置副本 | `boltshell/server/internal/sponsors/remote.embed.json` | 发版前与上一文件同步；`wails dev` 一般优先读到仓库里的 `config/sponsors.remote.json` |
+| 服务端端口与密钥 | `boltshell-server/server/config.yaml` | `system.addr: 8888`；`analytics.enabled` / `app-key` / `app-secret`（**须与客户端一致**） |
+| 用户侧数据（勿提交） | `%LOCALAPPDATA%\BoltShell\` | `install.id`、`analytics.queue`、`analytics.prefs.json` |
+
+密钥不一致 → 上报 401，队列不会被消费掉（可下次改对后再 Flush）。
+
+### 14.3 如何启动（本地）
+
+**服务端（先起）：**
+
+```powershell
+cd e:\resource\person\boltshell\boltshell-server\server
+go run .
+```
+
+- API：`http://127.0.0.1:8888`
+- 健康：`GET http://127.0.0.1:8888/health` → `"ok"`
+- 管理台前端（可选）：`cd ..\web` → `npm run dev`
+
+**客户端：**
+
+```powershell
+cd e:\resource\person\boltshell\boltshell\server
+wails dev
+```
+
+左侧栏「统」= 统计开，「静」= 关（默认开）。
+
+### 14.4 验证时看哪里（总览）
+
+| 现象 | 正确观察方式 | 错误期待 |
+|------|--------------|----------|
+| 点赞助位开外链 | 系统默认浏览器打开落地页 | WebView Network 里出现导航请求 |
+| 埋点写入 | `%LOCALAPPDATA%\BoltShell\analytics.queue` | 前端 fetch 日志 |
+| 上报到服务端 | 表 `bs_analytics_events` / admin API / 服务端日志 | DevTools Network |
+| 立刻冲刷队列 | DevTools Console：`window.go.main.App.FlushAnalytics()` | 等 5 分钟定时器（也可等，但不便调试） |
+
+---
+
+### 14.5 场景 A：服务端存活 + 表已自动建好
+
+**步骤：**
+
+1. 启动 `go run .`，日志无 AutoMigrate 报错。
+2. 浏览器或 curl：`http://127.0.0.1:8888/health`。
+3. 用 DB 工具打开 `boltshell-server/server/boltshell.db`（路径以 `config.yaml` → `sqlite.path` + `db-name` 为准，默认当前目录 `boltshell.db`）。
+
+**通过标准：**
+
+- health 返回 ok  
+- 存在三张表：`bs_analytics_events`、`bs_daily_install_active`、`bs_daily_slot_stats`  
+- **无需**事先执行建表 SQL  
+
+---
+
+### 14.6 场景 B：`app_launch`（启动即记）
+
+**步骤：**
+
+1. 确认左侧「统」为开启。
+2. 完全退出客户端后重新 `wails dev` / 启动。
+3. 打开 `%LOCALAPPDATA%\BoltShell\analytics.queue`（JSON 数组）。
+4. Console 执行：`await window.go.main.App.FlushAnalytics()`。
+5. 查库：
+
+```sql
+SELECT id, event, install_id, app_version, os, is_pro, event_ts
+FROM bs_analytics_events
+WHERE event = 'app_launch'
+ORDER BY received_at DESC
+LIMIT 10;
+```
+
+**通过标准：**
+
+- 队列或库中出现 `event=app_launch`  
+- 同一次启动通常只有 1 条（再启动会再增加）  
+- `install_id` 与 `%LOCALAPPDATA%\BoltShell\install.id` 文件内容一致  
+- `os` 为 `windows` / `darwin` / `linux` 之一  
+
+**失败排查：**
+
+- 队列没有：开关是否关闭、`initAnalytics` 是否报错（看客户端日志）  
+- 队列有、库没有：`analyticsURL` 是否指向 `127.0.0.1:8888`、服务端是否在跑、AppKey/Secret 是否一致、是否执行了 Flush  
+
+---
+
+### 14.7 场景 C：赞助位曝光 `sponsor_impression`
+
+**步骤：**
+
+1. 非 Pro，能看到赞助位（快速连接底栏或连接后侧栏）。
+2. 进入对应界面，让 `SponsorBanner` 完成挂载。
+3. 看队列或 Flush 后查库：
+
+```sql
+SELECT slot_id, event, link_host, config_version, event_day
+FROM bs_analytics_events
+WHERE event = 'sponsor_impression'
+ORDER BY received_at DESC;
+```
+
+4. **去重验证：** 在同一界面态下反复触发重绘/不离开该态，同一 `slot_id` 不应狂刷几十条；断线回到快速连接（新的 surfaceSession）或新开会话侧栏，允许再记 1 次。
+
+**通过标准：**
+
+- 每个可见 slot 在同一 `surfaceSession + 自然日` 下约 1 次 impression  
+- Pro 用户无赞助 UI → 无（或极少）`sponsor_*`  
+- 仅拉 `sponsors.json` **不会**产生 impression  
+
+---
+
+### 14.8 场景 D：点击开链 `sponsor_click` + BrowserOpenURL
+
+**步骤：**
+
+1. 点击侧栏/底栏赞助条（如「开源」「Pro」）。
+2. 观察 **系统浏览器** 是否打开配置里的 `linkUrl`（不是 WebView 内跳转）。
+3. Flush 后查库：
+
+```sql
+SELECT slot_id, link_host, event_ts
+FROM bs_analytics_events
+WHERE event = 'sponsor_click'
+ORDER BY received_at DESC
+LIMIT 10;
+```
+
+**通过标准：**
+
+- 外链能打开（主功能优先；埋点失败不应挡住打开）  
+- 库中有对应 `sponsor_click`；`link_host` 仅为 host（如 `gitee.com`），**无**完整 path/query，**无** IP 当 host  
+- DevTools Network **可以没有** 任何与点击相关的文档请求 —— 这是正常的  
+
+**失败排查：**
+
+- 浏览器没开：看 Console 是否有 runtime 报错；Console 试 `window.runtime.BrowserOpenURL('https://example.com')`  
+- 有打开无 click 事件：看队列、开关、是否 Pro  
+
+---
+
+### 14.9 场景 E：关闭赞助位 `sponsor_dismiss`
+
+**步骤：**
+
+1. 鼠标悬停赞助条，点右上角「×」。
+2. 该 slot 应暂时消失（`sponsor.state` 关闭期）。
+3. Flush 后查库 `event = 'sponsor_dismiss'`。
+4. 关闭期内再进界面：不应再出现该位，也不应再刷 impression。
+
+**通过标准：**
+
+- UI 隐藏 + 有 `sponsor_dismiss` 事件  
+- 关闭期内无该 slot 的新 impression  
+
+---
+
+### 14.10 场景 F：`ssh_connected`（可选 P3，已实现首次会话）
+
+**步骤：**
+
+1. 成功建立一次 SSH 会话（`StartSession` 成功）。
+2. Flush 后查库 `event = 'ssh_connected'`。
+
+**通过标准：**
+
+- 同一进程生命周期内通常只记 **1 次**（首次连接成功）  
+- 事件中 **不含** 主机名、IP、端口、命令  
+
+---
+
+### 14.11 场景 G：隐私开关关闭
+
+**步骤：**
+
+1. 点左侧「统」→ 变为「静」（关闭）。
+2. 重启或继续操作赞助位。
+3. 看 `analytics.prefs.json` 中 `enabled: false`。
+4. 队列不应再增长（或不再新增事件）；Flush 也不应再往服务端推新事件。
+
+**通过标准：**
+
+- 关闭后主功能、赞助展示仍正常  
+- 无新埋点入队  
+
+再点「静」→「统」可恢复。
+
+---
+
+### 14.12 场景 H：断网 / 服务端未启动（本地队列）
+
+**步骤：**
+
+1. 停掉 `boltshell-server`（或改错 `analyticsURL`）。
+2. 正常使用客户端：启动、看广告、点击。
+3. 确认 `analytics.queue` 仍在增长。
+4. 主功能（SSH/SFTP）不受影响。
+5. 再启动服务端，执行 `FlushAnalytics()` 或等待定时上报。
+
+**通过标准：**
+
+- 断网/无服务时功能正常，队列堆积  
+- 恢复后能成功入库，队列缩短或清空  
+
+---
+
+### 14.13 场景 I：签名与限流（防刷）
+
+**步骤：**
+
+1. 用错误 `app-secret` 的客户端配置启动 → Flush → 应失败，队列保留。
+2. 用 curl **不带** `X-BoltShell-*` 头 POST `/api/v1/analytics/events` → 401。
+3. （可选）短时间大量请求 → 触发 429 限流。
+
+**通过标准：**
+
+- 无合法签名不能污染库  
+- 合法客户端改回正确密钥后可继续上报  
+
+示例（合法签名需自算 HMAC，调试更简单的方式是改 yaml 密钥做正反对比）：
+
+```http
+POST /api/v1/analytics/events
+Content-Type: application/json
+X-BoltShell-App-Key: boltshell-desktop
+X-BoltShell-Ts: <unix秒>
+X-BoltShell-Sign: <hmac-sha256(secret, ts + "\n" + sha256hex(body))>
+```
+
+---
+
+### 14.14 场景 J：管理端看数 / CSV（给甲方口径）
+
+管理台侧栏：**统计数据 → 赞助统计**（页面 `view/analytics/index.vue`）。
+
+- 支持日期区间、按 `slotId` 过滤、查看免费 MAU / 近 7 日均免费 DAU、分日 DAU、分 slot 曝光/点击/CTR  
+- **导出 CSV** 按钮下载 slot 汇总  
+
+也可直接调 API（需登录 JWT / `x-token`）：
+
+| 接口 | 作用 |
+|------|------|
+| `GET /api/v1/analytics/admin/summary?from=YYYY-MM-DD&to=YYYY-MM-DD` | 免费/全体 MAU、分日 DAU、近 7 日均免费 DAU |
+| `GET /api/v1/analytics/admin/slots?from=...&to=...&slotId=sidebar_1` | 分 slot 曝光/点击/关闭/CTR |
+| `GET /api/v1/analytics/admin/export.csv?from=...&to=...` | CSV 导出 |
+
+**首次上菜单（已有库）：** 执行 `server/sql/seed_analytics_menu.sql`，然后 **重启后端** 并 **重新登录** 管理台（动态路由刷新）。新库初始化会走 `source/system/menu.go` / `api.go` / `casbin.go`。
+
+**通过标准（自洽）：**
+
+- 侧栏能看到「统计数据 / 赞助统计」  
+- 今日本机测过：summary 里免费 DAU ≥ 1（`is_pro=false` 的 launch）  
+- slots 里 impression / click 与手动点的次数大致一致（注意去重规则）  
+- CTR ≈ clicks / impressions  
+- Casbin 若 403：确认 `casbin_rule` 已有上述 3 条 GET，并重启服务端  
+
+也可直接 SQL 对账：
+
+```sql
+-- 今日免费 DAU
+SELECT COUNT(DISTINCT install_id)
+FROM bs_daily_install_active
+WHERE day = date('now','localtime') AND is_pro = 'false';
+
+-- 某 slot 今日汇总
+SELECT * FROM bs_daily_slot_stats
+WHERE day = date('now','localtime') AND slot_id = 'sidebar_1';
+```
+
+---
+
+### 14.15 场景 K：一键冒烟清单（每次改统计代码后）
+
+按顺序勾选：
+
+- [ ] 服务端 `go run .`，health ok，三张 `bs_*` 表存在（**未**手工建表）  
+- [ ] 客户端 `sponsors.remote.json` 的 `analyticsURL` 指向 `127.0.0.1:8888`  
+- [ ] AppKey/Secret 与 `config.yaml` 一致  
+- [ ] 冷启动 → queue/库有 `app_launch`  
+- [ ] 看见赞助位 → 有 `sponsor_impression`（不过度刷）  
+- [ ] 点击 → 系统浏览器打开 + 有 `sponsor_click`  
+- [ ] 点 × → 位消失 + 有 `sponsor_dismiss`  
+- [ ] Flush 成功，admin summary / slots 能看到数  
+- [ ] 关「统」后不再入队；开网/关服务时主功能正常  
+
+---
+
+*文档结束。**带赞助位的正式包发布前，必须完成 P0+P1**；服务端可简陋，客户端埋点不能缺。本地开发默认走 `127.0.0.1:8888`，表由 AutoMigrate 自动创建。*

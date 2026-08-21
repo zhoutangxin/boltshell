@@ -1,10 +1,16 @@
 {
   "remoteURL": "http://47.108.138.168/config/sponsors.json",
   "releaseURL": "http://47.108.138.168/config/release.json",
-  "proUpgradeURL": "http://47.108.138.168/#pricing",
+  "proUpgradeURL": "http://127.0.0.1:8888/#pricing",
+  "analyticsURL": "http://127.0.0.1:8888/api/v1/analytics/events",
+  "analyticsAppKey": "boltshell-desktop",
+  "analyticsAppSecret": "boltshell-dev-secret-change-me",
 
   "_说明": "开发者远程入口（非用户 config.json）。发版前请同步到 internal/sponsors/remote.embed.json。字段说明见 config/README.md",
   "_说明_remoteURL": "远程赞助配置 sponsors.json 地址",
   "_说明_releaseURL": "远程升级信息 release.json 地址",
-  "_说明_proUpgradeURL": "Pro 购买/升级页"
+  "_说明_proUpgradeURL": "Pro 购买/升级页",
+  "_说明_analyticsURL": "匿名统计批量上报地址（本地开发默认 127.0.0.1:8888）",
+  "_说明_analyticsAppKey": "统计 AppKey（可进包）",
+  "_说明_analyticsAppSecret": "统计 HMAC 密钥（进包；仅防君子+限流）"
 }

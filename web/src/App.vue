@@ -11,7 +11,7 @@
  */
 import { nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { subscribeBackendEvents } from './composables/useBackendEvents'
-import { ReadRemoteFile, WriteRemoteFile } from '../wailsjs/go/main/App.js'
+import { ReadRemoteFile, WriteRemoteFile, GetAnalyticsEnabled, SetAnalyticsEnabled } from '../wailsjs/go/main/App.js'
 
 import LeftRail from './components/layout/LeftRail.vue'
 import UpdatePromptModal from './components/updater/UpdatePromptModal.vue'
@@ -119,6 +119,18 @@ const {
   dismissUpdatePrompt,
   hasUpdate,
 } = updaterApi
+
+// —— 匿名统计开关 ——
+const analyticsEnabled = ref(true)
+async function toggleAnalytics() {
+  const next = !analyticsEnabled.value
+  try {
+    await SetAnalyticsEnabled(next)
+    analyticsEnabled.value = next
+  } catch (e) {
+    console.error('[BoltShell] SetAnalyticsEnabled failed', e)
+  }
+}
 
 // —— xterm 终端 ——
 const termApi = useTerminal(activeSessionID, sessions, isTypingInForm)
@@ -316,6 +328,11 @@ onMounted(async () => {
 
   await refreshList()
   loadRecents()
+  try {
+    analyticsEnabled.value = await GetAnalyticsEnabled()
+  } catch {
+    /* ignore */
+  }
 
   window.addEventListener('keydown', (e) => onMgrKeydown(e, handleConnect))
   window.addEventListener('keydown', (e) => onQuickKeydown(e, handleConnect))
@@ -351,8 +368,10 @@ watch(sidebarSlots, () => {
       :latest-version="updateInfo?.LatestVersion"
       :upgrading="upgrading"
       :upgrade-status="upgradeStatus"
+      :analytics-enabled="analyticsEnabled"
       @open-mgr="openMgr"
       @upgrade="applyUpgrade"
+      @toggle-analytics="toggleAnalytics"
     />
 
     <SysInfoPanel
@@ -364,6 +383,8 @@ watch(sidebarSlots, () => {
       :disk-percent="diskPercent"
       :sidebar-slots="sidebarSlots"
       :pro-upgrade-url="sponsorConfig?.ProUpgradeURL"
+      :surface-session="activeSessionID ? `sb-${activeSessionID}` : 'sb'"
+      :config-version="sponsorConfig?.Version"
       @dismiss-sponsor="(id, days) => dismissSponsor(id, days)"
     />
 
@@ -391,6 +412,7 @@ watch(sidebarSlots, () => {
             :group-name="groupName"
             :sponsor-slot="quickSlot"
             :pro-upgrade-url="sponsorConfig?.ProUpgradeURL"
+            :config-version="sponsorConfig?.Version"
             @select="selectedQuickID = $event"
             @connect="handleConnect"
             @clear-recents="clearRecents"

@@ -27,6 +27,10 @@
 | [广告术语与指标说明](business/BoltShell_广告术语与指标说明.md) | PV / UV / DAU / MAU / slot / CTR / CPM / CPT / SDK 等口径 |
 | [赞助位报价与市场参考](business/BoltShell_赞助位报价与市场参考.md) | 双页位数量、刊例、报价示例、公开市场价格与曝光参考 |
 | [客户端赞助数据统计设计](business/BoltShell_客户端赞助数据统计设计.md) | SSH 客户端如何埋点、去重曝光、上报与汇总报数；含 cloud 工程建议 |
+| [竞品变现与广告风险调研](business/BoltShell_竞品变现与广告风险调研.md) | SSH / 工具类软件靠广告能不能赚钱、同行踩坑案例、云厂商 CPS、赞助位行为约束 |
+| [开源许可证详解与选型](business/BoltShell_开源许可证详解与选型.md) | MIT / Apache / GPL / BSL / ELv2 逐条详解、许可证防不住什么、是否开源的决策框架 |
+| [个人开发者商业化 FAQ](business/BoltShell_个人开发者商业化FAQ.md) | 一个人怎么赚钱；卖解锁 vs 卖服务；FinalShell 导入；埋点信任；子域可屏蔽 |
+| [产品亮点与竞品对比](business/BoltShell_产品亮点与竞品对比.md) | 亮点、竞品表、P0/P1、**如何宣传**、**Pro 额外功能**、Go/Termius/跨机传说明 |
 
 ## 工程与架构 · `engineering/`
 
